@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PLCcom OPC UA SDK - Workshop 41: Sample NodeSet
+
+  This file defines a small address space in the OPC UA NodeSet2 XML format.
+  It is used by Server Workshop 41 to demonstrate how to import type definitions
+  and pre-built instances into an OPC UA server.
+
+  What is a NodeSet?
+  A NodeSet XML file is the standard way to share OPC UA address space definitions.
+  It contains type definitions (ObjectTypes, VariableTypes) and optionally instances.
+  OPC UA Companion Specifications (e.g. OPC UA for Machinery, PackML, DI) are
+  distributed as NodeSet files. You import them once and the types are available
+  in your server's type hierarchy.
+
+  Structure of this file:
+  Namespace : urn:plccom:workshop:nodeset
+  Types     : MotorType, SensorType
+  Instances : Motors/Motor1, Motors/Motor2
+              Sensors/TempSensor1, PressureSensor1
+
+  NodeId ranges used:
+    1000-1999  Type definitions
+    2000-2999  Instances
+-->
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"
+           xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd">
+
+  <!--
+    NamespaceUris: every NodeSet defines its own namespace URI.
+    The server assigns a namespace index (ns=1, ns=2, ...) at import time.
+    The URI is the stable identifier - the index can vary between servers.
+  -->
+  <NamespaceUris>
+    <Uri>urn:plccom:workshop:nodeset</Uri>
+  </NamespaceUris>
+
+  <!--
+    Aliases: short names for frequently used standard NodeIds.
+    Instead of writing i=47 everywhere we write HasComponent.
+    These are all standard OPC UA reference types and base types (ns=0).
+  -->
+  <Aliases>
+    <Alias Alias="Boolean">i=1</Alias>
+    <Alias Alias="Double">i=11</Alias>
+    <Alias Alias="String">i=12</Alias>
+    <Alias Alias="HasComponent">i=47</Alias>
+    <Alias Alias="HasProperty">i=46</Alias>
+    <Alias Alias="HasSubtype">i=45</Alias>
+    <Alias Alias="HasTypeDefinition">i=40</Alias>
+    <Alias Alias="Organizes">i=35</Alias>
+    <Alias Alias="BaseObjectType">i=58</Alias>
+    <Alias Alias="BaseDataVariableType">i=63</Alias>
+    <Alias Alias="PropertyType">i=68</Alias>
+    <Alias Alias="FolderType">i=61</Alias>
+  </Aliases>
+
+  <!-- TYPE DEFINITIONS
+       Types define the structure - like a class in C#.
+       Instances are created from types (see below). -->
+
+  <!-- MotorType (ns=1;i=1000)
+       Derives from BaseObjectType (the root of all object types in OPC UA).
+       A motor has:
+         Speed        - current speed in RPM (Double, variable)
+         Running      - whether the motor is on (Boolean, variable)
+         SerialNumber - static identification (String, property)
+
+       Variables use HasComponent, properties use HasProperty.
+       The difference: properties are metadata (do not change often),
+       variables are process data (change frequently). -->
+  <UAObjectType NodeId="ns=1;i=1000" BrowseName="1:MotorType">
+    <DisplayName>MotorType</DisplayName>
+    <Description>A motor with speed, running state and serial number.</Description>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">BaseObjectType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=1001</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=1002</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=1003</Reference>
+    </References>
+  </UAObjectType>
+
+  <!-- MotorType/Speed -->
+  <UAVariable NodeId="ns=1;i=1001" BrowseName="1:Speed" DataType="Double" ParentNodeId="ns=1;i=1000">
+    <DisplayName>Speed</DisplayName>
+    <Description>Motor speed in RPM.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+    <Value><uax:Double>0</uax:Double></Value>
+  </UAVariable>
+
+  <!-- MotorType/Running -->
+  <UAVariable NodeId="ns=1;i=1002" BrowseName="1:Running" DataType="Boolean" ParentNodeId="ns=1;i=1000">
+    <DisplayName>Running</DisplayName>
+    <Description>True when the motor is running.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+    <Value><uax:Boolean>false</uax:Boolean></Value>
+  </UAVariable>
+
+  <!-- MotorType/SerialNumber
+       Property = static metadata, not process data.
+       Use HasProperty (not HasComponent) for properties. -->
+  <UAVariable NodeId="ns=1;i=1003" BrowseName="1:SerialNumber" DataType="String" ParentNodeId="ns=1;i=1000">
+    <DisplayName>SerialNumber</DisplayName>
+    <Description>Factory serial number of this motor.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAVariable>
+
+  <!-- SensorType (ns=1;i=1100)
+       A generic sensor with:
+         Value   - measured value (Double, variable)
+         Unit    - engineering unit as text, e.g. degC (String, property)
+         InAlarm - true when value is outside limits (Boolean, variable) -->
+  <UAObjectType NodeId="ns=1;i=1100" BrowseName="1:SensorType">
+    <DisplayName>SensorType</DisplayName>
+    <Description>A generic sensor with measured value, unit and alarm state.</Description>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">BaseObjectType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=1101</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=1102</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=1103</Reference>
+    </References>
+  </UAObjectType>
+
+  <!-- SensorType/Value -->
+  <UAVariable NodeId="ns=1;i=1101" BrowseName="1:Value" DataType="Double" ParentNodeId="ns=1;i=1100">
+    <DisplayName>Value</DisplayName>
+    <Description>Current measured value.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1100</Reference>
+    </References>
+    <Value><uax:Double>0</uax:Double></Value>
+  </UAVariable>
+
+  <!-- SensorType/Unit (Property - set once at configuration time) -->
+  <UAVariable NodeId="ns=1;i=1102" BrowseName="1:Unit" DataType="String" ParentNodeId="ns=1;i=1100">
+    <DisplayName>Unit</DisplayName>
+    <Description>Engineering unit, e.g. degC, bar, m/s.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1100</Reference>
+    </References>
+  </UAVariable>
+
+  <!-- SensorType/InAlarm -->
+  <UAVariable NodeId="ns=1;i=1103" BrowseName="1:InAlarm" DataType="Boolean" ParentNodeId="ns=1;i=1100">
+    <DisplayName>InAlarm</DisplayName>
+    <Description>True when the measured value is outside the configured limits.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1100</Reference>
+    </References>
+    <Value><uax:Boolean>false</uax:Boolean></Value>
+  </UAVariable>
+
+  <!-- INSTANCES
+       Instances are concrete objects created from the types above.
+       They appear under Objects in the address space and hold real values.
+       i=85 is the standard OPC UA Objects folder (ns=0). -->
+
+  <!-- Motors folder
+       Attached to the standard Objects folder (i=85) via Organizes reference. -->
+  <UAObject NodeId="ns=1;i=2000" BrowseName="1:Motors">
+    <DisplayName>Motors</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">FolderType</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">i=85</Reference>
+      <Reference ReferenceType="Organizes" IsForward="true">ns=1;i=2001</Reference>
+      <Reference ReferenceType="Organizes" IsForward="true">ns=1;i=2002</Reference>
+    </References>
+  </UAObject>
+
+  <!-- Motor1 instance of MotorType (running at 1450 RPM) -->
+  <UAObject NodeId="ns=1;i=2001" BrowseName="1:Motor1" ParentNodeId="ns=1;i=2000">
+    <DisplayName>Motor1</DisplayName>
+    <References>
+      <!-- HasTypeDefinition links this instance to its type -->
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">ns=1;i=1000</Reference>
+      <Reference ReferenceType="Organizes"    IsForward="false">ns=1;i=2000</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2011</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2012</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=2013</Reference>
+    </References>
+  </UAObject>
+
+  <UAVariable NodeId="ns=1;i=2011" BrowseName="1:Speed" DataType="Double" ParentNodeId="ns=1;i=2001">
+    <DisplayName>Speed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2001</Reference>
+    </References>
+    <Value><uax:Double>1450</uax:Double></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2012" BrowseName="1:Running" DataType="Boolean" ParentNodeId="ns=1;i=2001">
+    <DisplayName>Running</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2001</Reference>
+    </References>
+    <Value><uax:Boolean>true</uax:Boolean></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2013" BrowseName="1:SerialNumber" DataType="String" ParentNodeId="ns=1;i=2001">
+    <DisplayName>SerialNumber</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=2001</Reference>
+    </References>
+    <Value><uax:String>MOT-2025-001</uax:String></Value>
+  </UAVariable>
+
+  <!-- Motor2 instance of MotorType (stopped) -->
+  <UAObject NodeId="ns=1;i=2002" BrowseName="1:Motor2" ParentNodeId="ns=1;i=2000">
+    <DisplayName>Motor2</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">ns=1;i=1000</Reference>
+      <Reference ReferenceType="Organizes"    IsForward="false">ns=1;i=2000</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2021</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2022</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=2023</Reference>
+    </References>
+  </UAObject>
+
+  <UAVariable NodeId="ns=1;i=2021" BrowseName="1:Speed" DataType="Double" ParentNodeId="ns=1;i=2002">
+    <DisplayName>Speed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2002</Reference>
+    </References>
+    <Value><uax:Double>0</uax:Double></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2022" BrowseName="1:Running" DataType="Boolean" ParentNodeId="ns=1;i=2002">
+    <DisplayName>Running</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2002</Reference>
+    </References>
+    <Value><uax:Boolean>false</uax:Boolean></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2023" BrowseName="1:SerialNumber" DataType="String" ParentNodeId="ns=1;i=2002">
+    <DisplayName>SerialNumber</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=2002</Reference>
+    </References>
+    <Value><uax:String>MOT-2025-002</uax:String></Value>
+  </UAVariable>
+
+  <!-- Sensors folder -->
+  <UAObject NodeId="ns=1;i=2100" BrowseName="1:Sensors">
+    <DisplayName>Sensors</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">FolderType</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">i=85</Reference>
+      <Reference ReferenceType="Organizes" IsForward="true">ns=1;i=2101</Reference>
+      <Reference ReferenceType="Organizes" IsForward="true">ns=1;i=2102</Reference>
+    </References>
+  </UAObject>
+
+  <!-- TempSensor1 instance of SensorType (23.5 degC, not in alarm) -->
+  <UAObject NodeId="ns=1;i=2101" BrowseName="1:TempSensor1" ParentNodeId="ns=1;i=2100">
+    <DisplayName>TempSensor1</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">ns=1;i=1100</Reference>
+      <Reference ReferenceType="Organizes"    IsForward="false">ns=1;i=2100</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2111</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=2112</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2113</Reference>
+    </References>
+  </UAObject>
+
+  <UAVariable NodeId="ns=1;i=2111" BrowseName="1:Value" DataType="Double" ParentNodeId="ns=1;i=2101">
+    <DisplayName>Value</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2101</Reference>
+    </References>
+    <Value><uax:Double>23.5</uax:Double></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2112" BrowseName="1:Unit" DataType="String" ParentNodeId="ns=1;i=2101">
+    <DisplayName>Unit</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=2101</Reference>
+    </References>
+    <Value><uax:String>degC</uax:String></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2113" BrowseName="1:InAlarm" DataType="Boolean" ParentNodeId="ns=1;i=2101">
+    <DisplayName>InAlarm</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2101</Reference>
+    </References>
+    <Value><uax:Boolean>false</uax:Boolean></Value>
+  </UAVariable>
+
+  <!-- PressureSensor1 instance of SensorType (4.7 bar, in alarm) -->
+  <UAObject NodeId="ns=1;i=2102" BrowseName="1:PressureSensor1" ParentNodeId="ns=1;i=2100">
+    <DisplayName>PressureSensor1</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">ns=1;i=1100</Reference>
+      <Reference ReferenceType="Organizes"    IsForward="false">ns=1;i=2100</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2121</Reference>
+      <Reference ReferenceType="HasProperty"  IsForward="true">ns=1;i=2122</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="true">ns=1;i=2123</Reference>
+    </References>
+  </UAObject>
+
+  <UAVariable NodeId="ns=1;i=2121" BrowseName="1:Value" DataType="Double" ParentNodeId="ns=1;i=2102">
+    <DisplayName>Value</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2102</Reference>
+    </References>
+    <Value><uax:Double>4.7</uax:Double></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2122" BrowseName="1:Unit" DataType="String" ParentNodeId="ns=1;i=2102">
+    <DisplayName>Unit</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">PropertyType</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=2102</Reference>
+    </References>
+    <Value><uax:String>bar</uax:String></Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;i=2123" BrowseName="1:InAlarm" DataType="Boolean" ParentNodeId="ns=1;i=2102">
+    <DisplayName>InAlarm</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition" IsForward="true">BaseDataVariableType</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=2102</Reference>
+    </References>
+    <Value><uax:Boolean>true</uax:Boolean></Value>
+  </UAVariable>
+
+</UANodeSet>
