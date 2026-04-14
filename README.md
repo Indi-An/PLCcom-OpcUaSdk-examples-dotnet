@@ -2,31 +2,112 @@
 
 <img src="https://www.indi-an.com//wp-content/uploads/2026/03/PLCcom_720.png" width="200" alt="PLCcom Logo">
 
-This repository provides quick-start examples for developers using the **PLCcom.Opc.Ua.Sdk** library. These examples demonstrate how easy it is to integrate PLCcom into your .NET applications, enabling seamless communication with OPC UA servers.
+This repository provides quick-start examples for developers using the **PLCcom.Opc.Ua.Sdk** library. These examples demonstrate how easy it is to integrate PLCcom into your .NET applications, enabling seamless communication with OPC UA servers — and how to build your own OPC UA servers.
+
+## Why PLCcom? — Address OPC UA Nodes by Path
+
+Most OPC UA SDKs require you to work with cryptic NodeIds like `ns=2;s=MyNode` or `ns=2;i=12345`. **PLCcom lets you address nodes by their browse path** — just like navigating a folder structure:
+
+```csharp
+// Read a value by path — no NodeId needed!
+DataValue value = client.ReadValueByPath("Objects.Plant.Line1.Machine1.Temperature");
+
+// Write a value by path
+client.WriteValueByPath("Objects.Plant.Line1.Machine1.RPM", 1500);
+
+// Monitor a value by path
+NodeId nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure");
+```
+
+This makes your code **readable, maintainable, and independent of server-specific NodeId assignments**. Of course, classic NodeId-based access is fully supported too.
 
 ## Overview of PLCcom.Opc.Ua.Sdk
 
-PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for .NET software developers to provide convenient client-side access to OPC UA (Open Platform Communications Unified Architecture) servers. The libraries are 100% .NET files and can be directly linked as a reference — no API calls necessary. The internal routines are optimized for high-performance access across platforms.
+PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for .NET software developers to provide convenient client and server access for OPC UA (Open Platform Communications Unified Architecture). The libraries are 100% .NET assemblies and can be directly linked as a NuGet package — no API calls necessary.
 
 ### Key Features
+- **Path-based node addressing** — access nodes by browse path (e.g. `Objects.Plant.Line1.Temperature`)
 - Easy to use, many functions can be called by a single line of code
 - Automatic Connect, Reconnect, and Disconnect functionality
 - Active keep-alive monitoring of the server state
-- Addressing of OPC nodes via browse name (e.g. `Objects.Data.Static.Scalar.Int64Value`)
+- OPC UA Client **and** Server SDK in a single assembly
+- Support for **opc.tcp** and **opc.https** transport protocols
 - Support for the most common OPC UA specifications:
-  - DataAccess (most used)
+  - Data Access (most used)
   - Alarm and Conditions
   - Historical Data
   - Historical Events
+  - Complex / Structured Data Types
 - Extensive tutorials for C# and Visual Basic included
 
 For a full list of supported features and detailed descriptions, refer to the official documentation [here](https://www.indi-an.com/help_opc_ua_client_sdk/net/help/html/R_Project_PLCcom_Opc_Ua_Sdk_Documentation.htm).
 
+## Workshop Overview
+
+### Client Workshops (C# and Visual Basic)
+
+| # | Workshop | Description |
+|---|----------|-------------|
+| **1 First Steps** | | |
+| 11 | Discover Server | Discover available OPC UA servers on the network |
+| 12 | Connect Endpoint | Connect to a server endpoint |
+| 13 | Connect with User Auth | Connect with username/password authentication |
+| 14 | Connect with Cert Auth | Connect with certificate-based authentication |
+| 15 | Browse by NodeId | Browse the server address space by NodeId |
+| 16 | Browse by Path | Browse the server address space by browse path |
+| 19 | Enable Debug Tracing | Enable diagnostic tracing for troubleshooting |
+| **2 Data Access** | | |
+| 21 | Read/Write by NodeId | Read and write values using NodeIds |
+| 22 | Read/Write by Path | Read and write values using browse paths |
+| 23 | Monitoring Items | Subscribe to value changes with monitored items |
+| 24 | Simple Method Calls | Call OPC UA methods with structured input |
+| 25 | Advanced Calls with Structs | Call methods with nested structures and arrays |
+| 26 | Read Attributes | Read node attributes (DataType, Description, etc.) |
+| 27 | Registered Read/Write | High-performance read/write with registered nodes |
+| **3 Alarm Conditions** | | |
+| 31 | Incoming Alarms | Subscribe to and display incoming alarm events |
+| 32 | Alarm List | Maintain a live list of all active alarms |
+| 33 | Alarm Conditions | Acknowledge, confirm and comment on alarms |
+| **4 Historical Data** | | |
+| 41 | Historical Data | Read, insert, update and delete historical values |
+| 42 | Read Historical Events | Read past events from the server history |
+| 43 | Monitoring Historical Events | Subscribe to historical event notifications |
+| **5 Complex Datatypes** | | |
+| 51 | Complex Types | Read and decode structured/complex data types |
+| **6 Simple Events** | | |
+| 61 | Simple Events | Subscribe to and display event notifications |
+| **7 Reverse Connect** | | |
+| 71 | Reverse Connect | Server-initiated connections through firewalls |
+
+### Server Workshops (C# and Visual Basic)
+
+| # | Workshop | Description |
+|---|----------|-------------|
+| **1 Data Access** | | |
+| 11 | Simple Server | Basic OPC UA server with variables |
+| 12 | User Authentication | Username/password and certificate authentication |
+| 13 | Methods | Expose callable methods in the address space |
+| 14 | Variables and Arrays | Various data types and array variables |
+| 15 | Custom Types | Define and expose custom structured types |
+| 16 | Multiple Namespaces | Organize nodes across multiple namespaces |
+| 17 | Dynamic Nodes | Create and remove nodes at runtime |
+| 19 | Advanced Server | Advanced server configuration and features |
+| **2 Alarms and Events** | | |
+| 21 | Simple Events | Fire events from the server |
+| 22 | Alarm Conditions | Implement alarm conditions with state management |
+| **3 Historical Data** | | |
+| 31 | Historical Access | Store and serve historical data values |
+| 32 | Historical Update | Insert, update, replace and delete history |
+| 33 | Historical Events | Record and serve historical events |
+| **4 NodeSet Import** | | |
+| 41 | NodeSet Import | Import OPC UA NodeSet2 XML files |
+| **5 Logging** | | |
+| 51 | Logging | Configure server-side logging and diagnostics |
+| **6 Reverse Connect** | | |
+| 61 | Reverse Connect | Server-initiated connections through firewalls |
+
 ## Requirements
 
-- .NET Framework 4.7.2 or higher (up to 4.8.1)
-- .NET 8.0
-- .NET 9.0
 - .NET 10.0
 - Visual Studio 2022 or newer (recommended VS2026)
 
@@ -52,7 +133,7 @@ Install-Package PLCcom.Opc.Ua.Sdk
 
 ## ⚠️ Important Safety Notice
 
-The examples in this repository are **for demonstration purposes only** and **must _not_** be used in production, safety‑critical, or industrial environments without your own checks.  
+The examples in this repository are **for demonstration purposes only** and **must _not_** be used in production, safety‑critical, or industrial environments without your own checks.
 **Use at your own risk!** Deploying these examples in real systems may lead to personal injury, property damage, or environmental harm and is **strictly prohibited**.
 
 The author disclaims all liability—direct, indirect, incidental, or consequential—arising from the use or misuse of these examples.

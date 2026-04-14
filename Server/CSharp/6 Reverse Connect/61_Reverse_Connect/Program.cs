@@ -1,3 +1,24 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 // ==============================================================================
 // PLCcom OPC UA Server SDK - Workshop 61: Reverse Connect
 //
@@ -22,7 +43,7 @@
 //   * How the server periodically attempts to connect to the client
 //   * How to use both normal and reverse connect simultaneously
 //
-// Normal endpoint:  opc.tcp://localhost:48460
+// Normal endpoint:  opc.tcp://localhost:48410
 // Reverse Connect:  -> opc.tcp://localhost:48500 (server connects to client)
 // ==============================================================================
 
@@ -63,7 +84,11 @@ var config = new UaServerConfiguration
     ApplicationName = "PLCcom Workshop 61 - Reverse Connect",
     ApplicationUri  = "urn:localhost:PLCcom:Workshop:61",
     ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses   = new List<string> { "opc.tcp://localhost:48460" },
+    BaseAddresses = new List<string>
+    {
+        "opc.tcp://localhost:48410",
+        "opc.https://localhost:48411"
+    },
     SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
     UserTokenPolicies = new List<UserTokenPolicy>
     {
@@ -108,7 +133,7 @@ temp.SetEngineeringUnits("C");
 string clientUrl = "opc.tcp://localhost:48500";
 server.AddReverseConnection(clientUrl, timeout: 30000);
 
-Console.WriteLine($"  Normal endpoint:    opc.tcp://localhost:48460");
+Console.WriteLine($"  Normal endpoint:    opc.tcp://localhost:48410");
 Console.WriteLine($"  Reverse Connect to: {clientUrl}");
 Console.WriteLine();
 Console.WriteLine("  The server will attempt to connect to the client every ~15 sec.");
@@ -120,7 +145,7 @@ Console.WriteLine("╔═══════════════════�
 Console.WriteLine("║  Server is running with Reverse Connect enabled.             ║");
 Console.WriteLine("║                                                              ║");
 Console.WriteLine("║  Normal endpoint (direct):                                   ║");
-Console.WriteLine("║    opc.tcp://localhost:48460                                 ║");
+Console.WriteLine("║    opc.tcp://localhost:48410                                 ║");
 Console.WriteLine("║    -> connect as usual, server is listening                  ║");
 Console.WriteLine("║                                                              ║");
 Console.WriteLine("║  Reverse Connect endpoint:                                   ║");

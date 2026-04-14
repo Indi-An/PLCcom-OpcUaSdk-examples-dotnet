@@ -1,0 +1,200 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 19: Enable Debug Tracing
+//
+// When troubleshooting OPC UA communication issues, the built-in trace
+// system is invaluable. It logs all OPC UA stack activity to a file:
+// service calls, security handshakes, errors and more.
+//
+// This workshop shows how to enable tracing before connecting. The trace
+// file is written to the application's Logs folder and can be inspected
+// with any text editor.
+//
+// What you will learn:
+//   * How to create and configure a TraceConfiguration
+//   * How to set the trace output file path
+//   * How to control trace verbosity with TraceMasks
+//   * How to bind the trace configuration to a session
+//
+// Target server: opc.tcp://localhost:48410
+// ==============================================================================
+
+using PLCcom.Opc.Ua;
+using PLCcom.Opc.Ua.Client;
+using PLCcom.Opc.Ua.Client.Sdk;
+using System;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        new Program().Start();
+    }
+
+    void Start()
+    {
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 19: Debug Tracing       ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  The built-in trace system logs all OPC UA stack activity    ║");
+        Console.WriteLine("║  to a file: service calls, security handshakes, errors.      ║");
+        Console.WriteLine("║  Essential for troubleshooting communication issues.         ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  What you will learn:                                        ║");
+        Console.WriteLine("║    * Create and configure a TraceConfiguration               ║");
+        Console.WriteLine("║    * Set the trace output file path                          ║");
+        Console.WriteLine("║    * Control trace verbosity with TraceMasks                 ║");
+        Console.WriteLine("║    * Bind the trace configuration to a session               ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+
+        try
+        {
+            // -- License ----------------------------------------------------------
+            string LicenseUserName = "<Enter your UserName here>";
+            string LicenseSerial = "<Enter your Serial here>";
+
+            // -- Step 1: Discover and select endpoint -----------------------------
+            string serverUrl = "opc.tcp://localhost:48410";
+
+            Console.WriteLine("  Server URL: " + serverUrl);
+            Console.WriteLine("  Discovering endpoints...");
+            Console.WriteLine();
+
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
+
+            if (endpoints.Count == 0)
+            {
+                Console.WriteLine("  No endpoints found. Is the server running?");
+                Console.ReadLine();
+                return;
+            }
+
+            Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
+            Console.WriteLine();
+            for (int i = 0; i < endpoints.Count; i++)
+                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+
+            Console.WriteLine();
+            Console.Write("  Please enter index of desired endpoint: ");
+            string input = Console.ReadLine();
+
+            if (!int.TryParse(input, out int index) || index < 0 || index >= endpoints.Count)
+            {
+                Console.WriteLine("  Invalid endpoint index.");
+                Console.ReadLine();
+                return;
+            }
+
+            // -- Step 2: Configure tracing ----------------------------------------
+            // TraceConfiguration controls what the OPC UA stack logs and where.
+            // OutputFilePath: the log file location (created automatically)
+            // DeleteOnLoad:   if true, the log file is cleared on each start
+            // TraceMasks:     controls verbosity (Error, Information, Service, All)
+            SessionConfiguration sessionConfig = SessionConfiguration.Build(
+                "PLCcom_Workshop_19", endpoints[index]);
+            sessionConfig.AutoConnect = true;
+
+            string logFile = AppDomain.CurrentDomain.BaseDirectory
+                + "Logs\\" + System.Diagnostics.Process.GetCurrentProcess().ProcessName + ".trace.log";
+
+            TraceConfiguration traceConfig = new TraceConfiguration();
+            traceConfig.OutputFilePath = logFile;
+            traceConfig.DeleteOnLoad = true;
+            traceConfig.TraceMasks = Utils.TraceMasks.All;
+            traceConfig.ApplyTraceSettings();
+
+            // Bind the trace configuration to the session.
+            // All OPC UA stack activity for this session will be logged.
+            sessionConfig.TraceConfiguration = traceConfig;
+
+            Console.WriteLine();
+            Console.WriteLine("  Trace file: " + logFile);
+            Console.WriteLine("  TraceMasks:  All (maximum verbosity)");
+            Console.WriteLine();
+
+            // -- Step 3: Connect and browse ---------------------------------------
+            using (UaClient client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig))
+            {
+                Console.WriteLine("  License: " + client.GetLicenceMessage());
+
+                client.CertificateValidation += (sender, e) => { e.Accept = true; };
+                client.ServerConnected += (s, e) =>
+                    Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss}");
+                client.ServerConnectionLost += (s, e) =>
+                    Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss}");
+                client.KeepAlive += (session, e) => { };
+
+                Console.WriteLine();
+
+                // Browse ObjectsFolder to generate some trace output
+                // TODO: Adjust this path to match your server's address space
+                string browsePath = "Objects.Plant.Line1.Machine1";
+                Console.WriteLine($"  Browsing: {browsePath}");
+
+                try
+                {
+                    NodeId sourceNode = client.GetNodeIdByPath(browsePath);
+
+                    BrowseDescription nodeToBrowse = new BrowseDescription();
+                    nodeToBrowse.NodeId = sourceNode;
+                    nodeToBrowse.BrowseDirection = BrowseDirection.Forward;
+                    nodeToBrowse.ReferenceTypeId = ReferenceTypeIds.HierarchicalReferences;
+                    nodeToBrowse.IncludeSubtypes = true;
+                    nodeToBrowse.NodeClassMask = (uint)(NodeClass.Object | NodeClass.Variable);
+                    nodeToBrowse.ResultMask = (uint)BrowseResultMask.All;
+
+                    BrowseDescriptionCollection nodesToBrowse = new BrowseDescriptionCollection();
+                    nodesToBrowse.Add(nodeToBrowse);
+
+                    ReferenceDescriptionCollection results = client.BrowseFull(nodesToBrowse);
+
+                    Console.WriteLine($"  {results.Count} child node(s) found.");
+                    Console.WriteLine();
+
+                    foreach (ReferenceDescription rd in results)
+                    {
+                        Console.WriteLine($"  {rd.DisplayName,-30} NodeId={rd.NodeId}  Class={rd.NodeClass}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("  Browse error: " + ex.Message);
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("  Check the trace file for detailed OPC UA stack logs:");
+                Console.WriteLine("  " + logFile);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("  Error: " + ex.Message);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Press ENTER to exit.");
+        Console.ReadLine();
+    }
+}

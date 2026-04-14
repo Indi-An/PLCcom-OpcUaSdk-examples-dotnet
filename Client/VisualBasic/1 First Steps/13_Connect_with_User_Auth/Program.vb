@@ -1,116 +1,164 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 13: Connect with User Authentication
+'
+' Workshop 12 connected anonymously. Many production servers require
+' username/password authentication. This workshop shows how to set
+' user credentials on the SessionConfiguration before connecting.
+'
+' OPC UA supports three user identity types:
+'   Anonymous   - no credentials (see Workshop 12)
+'   UserName    - classic username + password (this workshop)
+'   Certificate - X.509 client certificate (see Workshop 14)
+'
+' What you will learn:
+'   * How to set username/password credentials on a session
+'   * How UserIdentity is passed to the server during ActivateSession
+'   * How to handle authentication failures
+'
+' Target server: opc.tcp://localhost:48410
+' (Start Server Workshop 12 for a server that requires authentication)
+' ==============================================================================
+
+Imports PLCcom.Opc.Ua
+Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
 Imports System
-Imports PLCcom.Opc.Ua.Client
-Imports PLCcom.Opc.Ua
-Imports System.Reflection
 
 Public Class Program
-    'flag, accept all untrusted certicates or not
+
     Public Shared Sub Main(ByVal args As String())
-        Dim p As Program = New Program()
+        Dim p As New Program()
         p.Start()
     End Sub
 
     Private Sub Start()
+
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 13: User Authentication ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  Many servers require username/password authentication.      ║")
+        Console.WriteLine("║  This workshop shows how to set user credentials before      ║")
+        Console.WriteLine("║  connecting to the server.                                   ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  What you will learn:                                        ║")
+        Console.WriteLine("║    * Set username/password on SessionConfiguration           ║")
+        Console.WriteLine("║    * UserIdentity is sent during ActivateSession             ║")
+        Console.WriteLine("║    * Handle authentication failures                          ║")
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+        Console.WriteLine()
+
         Try
-            'Submit your license information from your license e-mail
+            ' -- License ----------------------------------------------------------
+            ' TODO: Replace with your license credentials from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/UA/DataAccessServer"), 60000)
+            ' -- Step 1: Discover and select endpoint -----------------------------
+            Dim serverUrl As String = "opc.tcp://localhost:48410"
 
-            'Sort endpoints by security level (highest security first)
-            Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
+            Console.WriteLine("  Server URL: " & serverUrl)
+            Console.WriteLine("  Discovering endpoints...")
+            Console.WriteLine()
 
-            If Endpoints.Count > 0 Then
-                Console.WriteLine("endpoints found:")
-                Dim counter As Integer = 0
+            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), 60000)
+            endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints)
 
-                For Each endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString() } => { UaClient.EndpointToString(endpoint)}")
-                Next
-
-                Console.WriteLine("please enter index of desired endpoint")
-                Dim NumberOfEndpoint As String = Console.ReadLine()
-                Dim iNumberOfEndpoint As Integer = -1
-
-                If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
-                    Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
-                    'Disable AutoConnect - we will connect manually in this example
-                    sessionConfiguration.AutoConnect = False
-
-                    'set user authentification
-                    sessionConfiguration.Identity = New UserIdentity("username", "userpw")
-
-                    'Display the certificate store path for debugging purposes
-                    Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
-
-                    'Create a new OPC UA client instance with license credentials
-                    Dim client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
-                    Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
-
-                    'Register event handlers to monitor the connection state
-                    AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
-                    AddHandler client.ServerConnected, AddressOf Client_ServerConnected
-                    AddHandler client.KeepAlive, AddressOf Client_KeepAlive
-                    AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-
-                    Try
-                        'connect client
-
-                        client.Connect() 'Connect client, not needed if sessionConfiguration.AutoConnect = true
-                        Console.WriteLine(client.GetSessionState().ToString())
-                        Console.WriteLine()
-                        Console.WriteLine("press enter for exit")
-                        Console.ReadLine()
-                        Return
-                    Finally
-                        If client.GetSessionState() = SessionState.Connected Then client.Disconnect()
-                    End Try
-                Else
-                    Console.WriteLine()
-                    Console.WriteLine("invalid number of Endpoint")
-                End If
-            Else
-                Console.WriteLine()
-                Console.WriteLine("no endpoints found")
+            If endpoints.Count = 0 Then
+                Console.WriteLine("  No endpoints found. Is the server running?")
+                Console.ReadLine()
+                Return
             End If
 
+            Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
             Console.WriteLine()
-            Console.WriteLine("press enter for exit")
+            For i As Integer = 0 To endpoints.Count - 1
+                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints(i))}")
+            Next
+
+            Console.WriteLine()
+            Console.Write("  Please enter index of desired endpoint: ")
+            Dim input As String = Console.ReadLine()
+            Dim index As Integer = -1
+            If Not Integer.TryParse(input, index) OrElse index < 0 OrElse index >= endpoints.Count Then
+                Console.WriteLine("  Invalid endpoint index.")
+                Console.ReadLine()
+                Return
+            End If
+
+            ' -- Step 2: Build SessionConfiguration with user credentials ---------
+            Dim sessionConfig As SessionConfiguration = SessionConfiguration.Build(
+                "PLCcom_Workshop_13", endpoints(index))
+            sessionConfig.AutoConnect = False
+
+            ' Set username/password authentication.
+            ' TODO: Replace with valid credentials for your server
+            sessionConfig.Identity = New UserIdentity("<username>", "<password>")
+
+            Console.WriteLine()
+            Console.WriteLine("  Certificate store: " & sessionConfig.CertificateStorePath)
+
+            ' -- Step 3: Create client and register events ------------------------
+            Dim client As New UaClient(LicenseUserName, LicenseSerial, sessionConfig)
+            Console.WriteLine("  License: " & client.GetLicenceMessage())
+            Console.WriteLine()
+
+            AddHandler client.ServerConnected, Sub(s, e)
+                Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss} Session established")
+            End Sub
+            AddHandler client.ServerConnectionLost, Sub(s, e)
+                Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss} Connection lost")
+            End Sub
+            AddHandler client.KeepAlive, Sub(session, e)
+            End Sub
+            AddHandler client.CertificateValidation, Sub(sender, e)
+                e.Accept = True
+            End Sub
+
+            ' -- Step 4: Connect --------------------------------------------------
+            Console.Write("  Connecting with user credentials ... ")
+            client.Connect()
+            Console.WriteLine("OK")
+            Console.WriteLine($"  Session state: {client.GetSessionState()}")
+            Console.WriteLine()
+
+            ' -- Step 5: Disconnect -----------------------------------------------
+            Console.WriteLine("  Press ENTER to disconnect and exit.")
             Console.ReadLine()
+
+            If client.GetSessionState() = SessionState.Connected Then
+                client.Disconnect()
+            End If
+
+            Console.WriteLine("  Disconnected.")
+
         Catch ex As Exception
-            Console.WriteLine(ex)
-            Console.WriteLine("press enter for exit")
+            Console.WriteLine("  Error: " & ex.Message)
+            Console.WriteLine()
+            Console.WriteLine("  Press ENTER to exit.")
             Console.ReadLine()
         End Try
+
     End Sub
 
-    Private Sub client_CertificateValidation(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
-        ' External certificate validation
-        If ServiceResult.IsGood(e.Error) Then
-            e.Accept = True
-        ElseIf Not e.ContainsUnsuppressibleStatusCodes Then
-            e.Accept = True
-        ElseIf e.ContainsUnsuppressibleStatusCodes Then
-            e.AcceptAll = True ' You can accept all unsuppressible status codes with this flag
-        Else
-            Throw New Exception(String.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo))
-        End If
-    End Sub
-
-    Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
-        Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
-    End Sub
-
-    Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
-        Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
-    End Sub
-
-    Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
-    End Sub
 End Class

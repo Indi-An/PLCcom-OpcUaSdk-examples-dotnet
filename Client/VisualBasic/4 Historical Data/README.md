@@ -1,17 +1,11 @@
-# 4 Historical Data – Examples
+# 4 Historical Data — Client (Visual Basic)
 
-This folder contains examples for reading and monitoring historical OPC UA data.
-Each subfolder is a standalone sample project.
+These workshops demonstrate OPC UA Historical Access (Part 11).
 
----
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 41 | Historical Data | ReadRaw, ReadProcessed, Insert, Update, Delete |
+| 42 | Read Historical Events | Read past events from the server history |
+| 43 | Monitoring Historical Events | Subscribe to historical event notifications |
 
-## Examples
-
-### 41_Historical_Data
-Read historical data values (raw, modified, processed) from the server.
-
-### 42_Read_Historical_Events
-Read historical event records from the server.
-
-### 43_Monitoring_Historical_Events
-Subscribe to and monitor historical events in real time.
+**Target server:** Workshop 41 requires Server Workshop 31 (Historical Access). Workshops 42-43 require Server Workshop 33 (Historical Events).

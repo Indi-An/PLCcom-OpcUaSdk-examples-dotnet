@@ -1,3 +1,41 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 27: Registered Read and Write
+'
+' RegisterNodes tells the server to optimize access to specific nodes.
+' The server may cache internal references, making subsequent read/write
+' operations faster. This is useful for high-frequency data access.
+' Always call UnregisterNodes when done.
+'
+' What you will learn:
+'   * How to register nodes for optimized access (RegisterNodes)
+'   * How to read and write using registered NodeIds
+'   * How to unregister nodes when done (UnregisterNodes)
+'   * When registered access improves performance
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
@@ -8,6 +46,8 @@ Imports TypeInfo = PLCcom.Opc.Ua.TypeInfo
 Public Class Program
 
     'flag, accept all untrusted certicates or not
+    Private autoAcceptUntrustedCertificates As Boolean = True
+
     Public Shared Sub Main(ByVal args As String())
         Dim p As Program = New Program()
         p.Start()
@@ -16,13 +56,30 @@ Public Class Program
     Private Sub Start()
         Try
 
+         Console.WriteLine()
+
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 27: Registered R/W      ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  RegisterNodes tells the server to optimize access to        ║")
+             Console.WriteLine("║  specific nodes. The server caches internal references,      ║")
+             Console.WriteLine("║  making subsequent read/write operations faster.             ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Register nodes for optimized access                     ║")
+             Console.WriteLine("║    * Read and write using registered NodeIds                 ║")
+             Console.WriteLine("║    * Unregister nodes when done                              ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -39,21 +96,22 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'Enable AutoConnect - the client will connect and reconnect automatically
+                    'enable auto connect functionality
                     sessionConfiguration.AutoConnect = True
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+
+                    'Create a new opc client instance and pass your license information
                     Using client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                         Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
                         Console.WriteLine("")
 
-                        'Register event handlers to monitor the connection state
+                        'register events
                         AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                         AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                         AddHandler client.SessionClosing, AddressOf Client_SessionClosing
@@ -62,8 +120,8 @@ Public Class Program
 
                         'sample nodeIds to register
                         Dim nodetoRegister As NodeIdCollection = New NodeIdCollection()
-                        nodetoRegister.Add(New NodeId("ns=2;i=10221")) 'Objects.Data.Static.Scalar.Int32Value by plccom demonstration dataaccess server
-                        nodetoRegister.Add(client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int16Value"))
+                        nodetoRegister.Add(client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM")) 'Objects.Plant.Line1.Machine1.RPM
+                        nodetoRegister.Add(client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature"))
                         'nodetoRegister.Add(your nodeid) 
                         'nodetoRegister.Add(your nodeid)
                         'nodetoRegister.Add(your nodeid)
@@ -80,8 +138,9 @@ Public Class Program
                             registeredNodeIds = res.RegisteredNodeIds
 
                             'write your registered node
-                            Dim sc As StatusCode = client.Write(registeredNodeIds(0), 12345, Attributes.Value)
+                            Dim sc As StatusCode = client.Write(registeredNodeIds(0), 1750, Attributes.Value)
                             Console.WriteLine(Utils.Format("write Node {0} Statuscode => {1}", registeredNodeIds(0).ToString(), sc.ToString()))
+
 
                             'copy NodeIdCollection to ReadValueIdCollection
                             Dim readValueIdCollection As ReadValueIdCollection = New ReadValueIdCollection()
@@ -94,11 +153,14 @@ Public Class Program
                                 readValueIdCollection.Add(rvi)
                             Next
 
+
                             'read your registered nodes
                             Dim readresults As DataValueCollection = client.Read(readValueIdCollection)
 
+
                             'print the results
                             For ii As Integer = 0 To readresults.Count - 1
+
 
                                 ' ignore attributes which are invalid for the node.
                                 If readresults(ii).StatusCode = StatusCodes.BadAttributeIdInvalid Then
@@ -107,6 +169,7 @@ Public Class Program
 
                                 Dim datatype As String = String.Empty
                                 Dim value As String = String.Empty
+
 
                                 ' display any unexpected error.
                                 If StatusCode.IsBad(readresults(ii).StatusCode) Then
@@ -169,17 +232,17 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)

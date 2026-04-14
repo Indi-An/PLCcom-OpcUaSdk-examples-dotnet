@@ -1,3 +1,41 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 24: Simple Method Calls
+'
+' OPC UA Methods are callable functions in the server address space.
+' A client invokes a method by sending a Call request with input
+' arguments and receives output arguments in the response.
+' This workshop demonstrates calling methods with structured input.
+'
+' What you will learn:
+'   * How to encode structured input arguments with BinaryEncoder
+'   * How to create an ExtensionObject for method input
+'   * How to call a method and evaluate the result
+'   * How to read output arguments from the CallMethodResult
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
@@ -7,6 +45,8 @@ Imports System.Reflection
 Public Class Program
 
     'flag, accept all untrusted certicates or not
+    Private autoAcceptUntrustedCertificates As Boolean = True
+
     Public Shared Sub Main(ByVal args As String())
         Dim p As Program = New Program()
         p.Start()
@@ -15,13 +55,30 @@ Public Class Program
     Private Sub Start()
         Try
 
+         Console.WriteLine()
+
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 24: Simple Method Calls ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  OPC UA Methods are callable functions in the server         ║")
+             Console.WriteLine("║  address space. This workshop shows how to call methods      ║")
+             Console.WriteLine("║  with structured input arguments using BinaryEncoder.        ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Encode structured input with BinaryEncoder              ║")
+             Console.WriteLine("║    * Create ExtensionObjects for method input                ║")
+             Console.WriteLine("║    * Call a method and evaluate the result                   ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -38,27 +95,29 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
                     sessionConfiguration.AutoConnect = True
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+
+                    'Create a new opc client instance and pass your license information
                     Using client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                         Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
                         Console.WriteLine("")
 
-                        'Register event handlers to monitor the connection state
+                        'register events
                         AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                         AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                         AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                         AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                         AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
 
+
                         ' 
-                        ' let�s starting a method call, step by step
+                        ' let´s starting a method call, step by step
                         ' In this simple case, we pass a simple structure named as 'DataStructure_One" constructed as follows:
                         ' 
                         ' structure DataStructure_One = 
@@ -119,6 +178,7 @@ Public Class Program
                         'call your method 
                         Dim result As CallMethodResult = client.Call(request)
 
+
                         'finaly evaluate your results,
                         If StatusCode.IsGood(result.StatusCode) Then
 
@@ -162,17 +222,17 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)

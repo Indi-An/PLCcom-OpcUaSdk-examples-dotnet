@@ -1,0 +1,285 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+Imports PLCcom.Opc.Ua
+Imports PLCcom.Opc.Ua.Server.Sdk
+Imports System
+Imports System.Collections.Generic
+
+' ==============================================================================
+' PLCcom OPC UA Server SDK - Workshop 15: Custom Types
+'
+' OPC UA allows servers to define custom structured DataTypes (Structs).
+' This workshop demonstrates:
+'   Part A - Object Hierarchy (the simple alternative to structs)
+'   Part B - Flat Struct (MotorDataType with 3 scalar fields)
+'   Part C - Nested Struct (PlantDataType containing MotorDataType)
+'   Part D - Struct with Array fields (double[], string[])
+'   Part E - Array of Structs (3 motors as MotorDataType[3])
+'   Part F - Struct containing an Array-of-Structs field
+'   Part G - Struct with a 2D Matrix field
+'
+' Connect with any OPC UA client to: opc.tcp://localhost:48410
+' ==============================================================================
+
+Module Program
+
+    Sub Main(args As String())
+
+        Dim LicenseUserName As String = "<Enter your UserName here>"
+        Dim LicenseSerial As String = "<Enter your Serial here>"
+
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+        Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 15: Custom Types        ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  This example demonstrates:                                  ║")
+        Console.WriteLine("║    * Object hierarchy (Objects with child Variables)         ║")
+        Console.WriteLine("║    * Flat structs, nested structs, array fields              ║")
+        Console.WriteLine("║    * Array of structs, struct with array-of-structs field    ║")
+        Console.WriteLine("║    * Struct with 2D matrix field                             ║")
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+        Console.WriteLine()
+
+        Dim config As New UaServerConfiguration With {
+            .ApplicationName = "PLCcom Workshop 15 - Custom Types",
+            .ApplicationUri = "urn:localhost:PLCcom:Workshop:15",
+            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+            .BaseAddresses = New List(Of String) From {
+                "opc.tcp://localhost:48410",
+                "opc.https://localhost:48411"
+            },
+            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
+                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
+            },
+            .ManufacturerName = "My Company GmbH",
+            .ProductName = "My OPC UA Server",
+            .SoftwareVersion = "1.0.0",
+            .BuildNumber = "42",
+            .NamespaceUri = "http://indi-an.com/opcua/workshop/custom-types",
+            .CertificateStorePath = ".\pki"
+        }
+
+        Using server As New UaServer(LicenseUserName, LicenseSerial)
+            AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
+
+            AddHandler server.ValuesWritten, Sub(s, e)
+                                                 For Each item In e.Items
+                                                     Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}")
+                                                 Next
+                                             End Sub
+
+            Console.Write("Starting server ... ")
+            Try
+                server.Start(config)
+            Catch ex As Exception
+                Console.WriteLine("FAILED")
+                Console.WriteLine(ex.Message)
+                Console.ReadLine()
+                Return
+            End Try
+            Console.WriteLine("OK")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part A: Object Hierarchy
+            ' =================================================================
+            Console.WriteLine("-- Part A: Object Hierarchy -------------------------------------")
+
+            Dim hierarchy = server.CreateFolder("Hierarchy")
+
+            Dim motorTypeId = server.CreateObjectType("MotorType")
+            Dim bearingTypeId = server.CreateObjectType("BearingType")
+            Dim machineTypeId = server.CreateObjectType("MachineType")
+
+            Dim machine = server.CreateObject(hierarchy, "CNC_Machine_01", typeDefinitionId:=machineTypeId)
+
+            Dim motor = server.CreateObject(machine.NodeId, "MainMotor", typeDefinitionId:=motorTypeId)
+            server.CreateVariable(Of Double)(motor, "Speed", initialValue:=1500.0)
+            server.CreateVariable(Of Double)(motor, "Temperature", initialValue:=45.0)
+            server.CreateVariable(Of Boolean)(motor, "Running", initialValue:=True)
+
+            Dim bearing = server.CreateObject(machine.NodeId, "MainBearing", typeDefinitionId:=bearingTypeId)
+            server.CreateVariable(Of Double)(bearing, "Temperature", initialValue:=38.0)
+            server.CreateVariable(Of Double)(bearing, "Vibration", initialValue:=0.5)
+
+            server.CreateVariable(Of String)(machine, "State", initialValue:="Running")
+            server.CreateVariable(Of Long)(machine, "CycleCount", initialValue:=0L)
+
+            Console.WriteLine($"  {machine.Path}")
+            Console.WriteLine($"    MainMotor    (MotorType):   Speed=1500, Temp=45, Running=true")
+            Console.WriteLine($"    MainBearing  (BearingType): Temp=38, Vibration=0.5")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part B: Flat Structs
+            ' =================================================================
+            Console.WriteLine("-- Part B: Flat Structs -----------------------------------------")
+
+            Dim structFolder = server.CreateFolder("StructData")
+
+            Dim motorDataTypeId = server.CreateStructDataType("MotorDataType",
+                ("Speed", DataTypeIds.Double, Nothing),
+                ("Temperature", DataTypeIds.Double, Nothing),
+                ("Running", DataTypeIds.Boolean, Nothing))
+
+            Dim machineDataTypeId = server.CreateStructDataType("MachineDataType",
+                ("State", DataTypeIds.String, Nothing),
+                ("CycleCount", DataTypeIds.Int64, Nothing),
+                ("MotorSpeed", DataTypeIds.Double, Nothing))
+
+            Dim motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId)
+            motorStruct.SetField(Of Double)("Speed", 1500.0)
+            motorStruct.SetField(Of Double)("Temperature", 45.0)
+            motorStruct.SetField(Of Boolean)("Running", True)
+
+            Dim machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId)
+            machineStruct.SetField(Of String)("State", "Running")
+            machineStruct.SetField(Of Long)("CycleCount", 0L)
+            machineStruct.SetField(Of Double)("MotorSpeed", 1500.0)
+
+            Console.WriteLine($"  MotorDataType     {motorDataTypeId}")
+            Console.WriteLine($"  MachineDataType   {machineDataTypeId}")
+            Console.WriteLine($"  Motor_Struct      {motorStruct.Path}")
+            Console.WriteLine($"  Machine_Struct    {machineStruct.Path}")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part C: Nested Struct
+            ' =================================================================
+            Console.WriteLine("-- Part C: Nested Struct ----------------------------------------")
+
+            Dim plantDataTypeId = server.CreateStructDataType("PlantDataType",
+                ("PlantName", DataTypeIds.String, Nothing),
+                ("ProductionCount", DataTypeIds.Int32, Nothing),
+                ("Motor", motorDataTypeId, Nothing),
+                ("Machine", machineDataTypeId, Nothing))
+
+            Dim plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId)
+            plantStruct.SetField(Of String)("PlantName", "Factory_01")
+            plantStruct.SetField(Of Integer)("ProductionCount", 42)
+            plantStruct.SetField(Of Double)("Motor.Speed", 2200.0)
+            plantStruct.SetField(Of Double)("Motor.Temperature", 55.5)
+            plantStruct.SetField(Of Boolean)("Motor.Running", True)
+            plantStruct.SetField(Of String)("Machine.State", "Producing")
+            plantStruct.SetField(Of Long)("Machine.CycleCount", 12345L)
+            plantStruct.SetField(Of Double)("Machine.MotorSpeed", 2200.0)
+
+            Console.WriteLine($"  PlantDataType     {plantDataTypeId}")
+            Console.WriteLine($"  Plant_Struct      {plantStruct.Path}")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part D: Struct with Array fields
+            ' =================================================================
+            Console.WriteLine("-- Part D: Struct with Array fields -----------------------------")
+
+            Dim sensorDataTypeId = server.CreateStructDataType("SensorDataType",
+                ("Name", DataTypeIds.String, Nothing),
+                ("Readings", DataTypeIds.Double, New UInteger() {4}),
+                ("Thresholds", DataTypeIds.Double, New UInteger() {2}))
+
+            Dim sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId)
+            sensorStruct.SetField(Of String)("Name", "TempSensor_01")
+            sensorStruct.SetField(Of Double())("Readings", New Double() {23.5, 24.1, 22.8, 25.0})
+            sensorStruct.SetField(Of Double())("Thresholds", New Double() {50.0, 75.0})
+
+            Console.WriteLine($"  SensorDataType    {sensorDataTypeId}")
+            Console.WriteLine($"  Sensor_Struct     {sensorStruct.Path}")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part E: Array of Structs
+            ' =================================================================
+            Console.WriteLine("-- Part E: Array of Structs -------------------------------------")
+
+            Dim motorArray = server.CreateStructArrayVariable(structFolder, "Motor_Array", motorDataTypeId, 3)
+
+            motorArray(0).SetField(Of Double)("Speed", 1000.0)
+            motorArray(0).SetField(Of Double)("Temperature", 40.0)
+            motorArray(0).SetField(Of Boolean)("Running", True)
+
+            motorArray(1).SetField(Of Double)("Speed", 1500.0)
+            motorArray(1).SetField(Of Double)("Temperature", 55.0)
+            motorArray(1).SetField(Of Boolean)("Running", True)
+
+            motorArray(2).SetField(Of Double)("Speed", 0.0)
+            motorArray(2).SetField(Of Double)("Temperature", 22.0)
+            motorArray(2).SetField(Of Boolean)("Running", False)
+
+            Console.WriteLine($"  Motor_Array       {motorArray.Path}")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part F: Struct with Array-of-Structs field
+            ' =================================================================
+            Console.WriteLine("-- Part F: Struct with Array-of-Structs field -------------------")
+
+            Dim factoryDataTypeId = server.CreateStructDataType("FactoryDataType",
+                ("FactoryName", DataTypeIds.String, Nothing),
+                ("Motors", motorDataTypeId, New UInteger() {2}))
+
+            Dim factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId)
+            factoryStruct.SetField(Of String)("FactoryName", "MainFactory")
+            factoryStruct.SetField(Of Double)("Motors.[0].Speed", 1000.0)
+            factoryStruct.SetField(Of Double)("Motors.[0].Temperature", 40.0)
+            factoryStruct.SetField(Of Boolean)("Motors.[0].Running", True)
+            factoryStruct.SetField(Of Double)("Motors.[1].Speed", 2000.0)
+            factoryStruct.SetField(Of Double)("Motors.[1].Temperature", 60.0)
+            factoryStruct.SetField(Of Boolean)("Motors.[1].Running", False)
+
+            Console.WriteLine($"  FactoryDataType   {factoryDataTypeId}")
+            Console.WriteLine($"  Factory_Struct    {factoryStruct.Path}")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Part G: Struct with 2D Matrix field
+            ' =================================================================
+            Console.WriteLine("-- Part G: Struct with 2D Matrix field --------------------------")
+
+            Dim gridDataTypeId = server.CreateStructDataType("GridDataType",
+                ("Label", DataTypeIds.String, Nothing),
+                ("Matrix", DataTypeIds.Double, New UInteger() {2, 3}))
+
+            Dim gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId)
+            gridStruct.SetField(Of String)("Label", "HeatMap_01")
+            gridStruct.SetField("Matrix", New Matrix(
+                New Double() {1.0, 2.0, 3.0, 4.0, 5.0, 6.0},
+                BuiltInType.Double,
+                New Integer() {2, 3}))
+
+            Console.WriteLine($"  GridDataType      {gridDataTypeId}")
+            Console.WriteLine($"  Grid_Struct       {gridStruct.Path}")
+            Console.WriteLine()
+
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+            Console.WriteLine("║  Server is running. Connect with any OPC UA client to:       ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Press ENTER to exit.                                        ║")
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+            Console.ReadLine()
+
+        End Using
+
+    End Sub
+
+End Module

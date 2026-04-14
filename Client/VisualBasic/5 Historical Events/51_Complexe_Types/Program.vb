@@ -1,3 +1,39 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 51: Complex Data Types
+'
+' OPC UA supports complex structured data types (Structs) that group
+' multiple fields into a single value. This workshop shows how to
+' read and decode structured values from the server.
+'
+' What you will learn:
+'   * How to read complex/structured data types
+'   * How to decode ExtensionObjects with BinaryDecoder
+'   * How to interpret structured field values
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports System
 Imports System.Collections.Generic
 Imports System.Diagnostics
@@ -24,15 +60,32 @@ Public Class Program
         program.Start()
     End Sub
 
-    Private Sub Start()
+    Private Async Sub Start()
         Try
+
+         Console.WriteLine()
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 51: Complex Types       ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  OPC UA supports complex structured data types (Structs)     ║")
+             Console.WriteLine("║  that group multiple fields into a single value. This        ║")
+             Console.WriteLine("║  workshop shows how to read and decode structured values.    ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Read complex/structured data types                      ║")
+             Console.WriteLine("║    * Decode ExtensionObjects with BinaryDecoder              ║")
+             Console.WriteLine("║    * Interpret structured field values                       ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -49,21 +102,21 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
                     'disable auto connect functionality
                     sessionConfiguration.AutoConnect = False
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+                    'Create a new opc client instance and pass your license information
                     client = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                     Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
                     Console.WriteLine("")
 
-                    'Register event handlers to monitor the connection state
+                    'register events
                     AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                     AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                     AddHandler client.SessionClosing, AddressOf Client_SessionClosing
@@ -86,7 +139,7 @@ Public Class Program
                         stopWatch.Reset()
                         stopWatch.Start()
                         Dim complexTypeSystem = client.GetComplexTypeSystem()
-                        complexTypeSystem.Load()
+                        Await complexTypeSystem.LoadAsync()
                         stopWatch.Stop()
                         Console.WriteLine($" Load type system took {stopWatch.ElapsedMilliseconds}ms.")
                         Console.WriteLine("Custom types defined for this session:")
@@ -156,17 +209,17 @@ Public Class Program
 
                         Console.WriteLine("Begin monitoring all nodes with custom data type")
 
-                        'Create a new subscription for monitoring data changes
+                        'create a new subscription
                         Using subscription As Subscription = New Subscription()
                             subscription.PublishingEnabled = True
                             subscription.PublishingInterval = 5000
                             subscription.DisplayName = "mySubsription"
 
-                            'Register subscription state change events
+                            'register subscription events
                             AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
                             AddHandler subscription.PublishStatusChanged, AddressOf Subscription_PublishStatusChanged
 
-                            'Add the subscription to the client instance
+                            'add new subscription to client
                             client.AddSubscription(subscription)
                             Dim list As List(Of MonitoredItem) = New List(Of MonitoredItem)()
 
@@ -183,7 +236,7 @@ Public Class Program
 
                             subscription.AddItems(list)
 
-                            'Apply all pending changes to the subscription
+                            'apply changes
                             subscription.ApplyChanges()
                             'enable publishing mode of subscription
                             'subscription.SetPublishingMode(true);
@@ -259,6 +312,7 @@ Public Class Program
                         Next
                     End If
 
+
                     'simple print, value is not a known BaseComplexType 
                     Dim notification As MonitoredItemNotification = TryCast(e.NotificationValue, MonitoredItemNotification)
                     Console.WriteLine("{0}: {1}, {2}", monitoredItem.DisplayName, notification.Value.SourceTimestamp, notification.Value.StatusCode)
@@ -282,6 +336,7 @@ Public Class Program
         Dim allExtensionObjects As List(Of ExtensionObject) = New List(Of ExtensionObject)()
 
         If value IsNot Nothing AndAlso value.Value IsNot Nothing AndAlso StatusCode.IsGood(value.StatusCode) Then
+
 
             'check if value a ExtensionObject or a array of ExtensionObject
             If value.Value.GetType().IsArray Then
@@ -331,22 +386,24 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session closed")
     End Sub
+
+
 
     ''' <summary>
     ''' Helper to cast a enumeration node value to an enumeration type.
@@ -361,6 +418,7 @@ Public Class Program
             End If
         End If
     End Sub
+
 
     ''' <summary>
     ''' Browse all variables in the objects folder.

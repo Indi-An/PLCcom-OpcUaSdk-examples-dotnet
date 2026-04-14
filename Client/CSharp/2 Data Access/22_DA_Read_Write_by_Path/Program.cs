@@ -1,3 +1,40 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 22: Read and Write by Path
+//
+// Instead of using numeric NodeIds, you can address nodes by their
+// dot-separated browse path (e.g. "Objects.Plant.Line1.Temperature").
+// GetNodeIdByPath() resolves the path to a NodeId, then you read/write
+// as usual. This is more readable and maintainable than raw NodeIds.
+//
+// What you will learn:
+//   * How to resolve a browse path to a NodeId (GetNodeIdByPath)
+//   * How to read and write values using path-resolved NodeIds
+//   * Synchronous and asynchronous read/write operations
+//
+// Target server: opc.tcp://localhost:48410
+// ==============================================================================
+
 using System;
 using System.Threading.Tasks;
 using PLCcom.Opc.Ua.Client.Sdk;
@@ -18,13 +55,31 @@ class Program
         try
         {
 
+             Console.WriteLine();
+
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 22: Read/Write by Path  ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Instead of numeric NodeIds, address nodes by their          ║");
+             Console.WriteLine("║  dot-separated browse path. GetNodeIdByPath() resolves       ║");
+             Console.WriteLine("║  the path to a NodeId, then you read/write as usual.         ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  What you will learn:                                        ║");
+             Console.WriteLine("║    * Resolve browse paths to NodeIds (GetNodeIdByPath)       ║");
+             Console.WriteLine("║    * Read and write using path-resolved NodeIds              ║");
+             Console.WriteLine("║    * Synchronous and asynchronous operations                 ║");
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+             Console.WriteLine();
+
+            //TODO
             //Submit your license information from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
 
-            // Sort endpoints by security level (highest security first)
+            //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
 
             if (Endpoints.Count > 0)
@@ -42,23 +97,23 @@ class Program
                 int iNumberOfEndpoint = -1;
                 if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
                 {
-                    // Create a SessionConfiguration with the selected endpoint and application name
+                    //create a a SessionConfiguration with the selected endpoint and application name
                     SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                                                                                           Endpoints[iNumberOfEndpoint]);
 
                     //enable autoconnect
                     sessionConfiguration.AutoConnect = true;
 
-                    // Display the certificate store path for debugging purposes
+                    //output certificate store path
                     Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
 
-                    // Create a new OPC UA client instance with license credentials
+                    //Create a new opc client instance and pass your license information
                     client = new UaClient(LicenseUserName, LicenseSerial, sessionConfiguration);
 
                     Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
                     Console.WriteLine("");
 
-                    // Register event handlers to monitor the connection state
+                    //register events
                     client.ServerConnectionLost += Client_ServerConnectionLost;
                     client.ServerConnected += Client_ServerConnected;
                     client.KeepAlive += Client_KeepAlive;
@@ -71,33 +126,30 @@ class Program
 
                     //Read multiple Nodes within one call 
 
-                    // Create a collection of nodes to read
+                    //first create a ReadValueIdCollection and fill this with ReadValueId objects
                     ReadValueIdCollection nodesToRead = new ReadValueIdCollection();
                     ReadValueId nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int16Value");
+                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature");
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
                     nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int32Value");
+                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM");
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
                     nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int64Value");
+                    nodeToRead.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure");
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
-                    // Read the node values synchronously
+                    //reading the nodes synchronous
                     DataValueCollection readresults = client.Read(nodesToRead);
 
                     for (int i = 0; i < readresults.Count; i++)
                     {
                         DataValue res = readresults[i];
-                        if (StatusCode.IsGood(res.StatusCode))
-                            Console.WriteLine("synchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + res.Value.ToString() + " StatusCode => " + res.StatusCode.ToString());
-                        else
-                            Console.WriteLine("read failed for " + nodesToRead[i].NodeId.ToString() + " StatusCode => " + res.StatusCode.ToString());
+                        Console.WriteLine("synchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + res.Value.ToString() + " StatusCode => " + res.StatusCode.ToString());
                     }
 
                     Console.WriteLine();
@@ -109,45 +161,39 @@ class Program
 
                     for (int i = 0; i < readResponse.Results.Count; i++)
                     {
-                        if (StatusCode.IsGood(readResponse.Results[i].StatusCode))
-                            Console.WriteLine("asynchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + readResponse.Results[i].ToString() + " StatusCode => " + readResponse.Results[i].StatusCode.ToString());
-                        else
-                            Console.WriteLine("async read failed for " + nodesToRead[i].NodeId.ToString() + " StatusCode => " + readResponse.Results[i].StatusCode.ToString());
+                        Console.WriteLine("asynchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + readResponse.Results[i].ToString() + " StatusCode => " + readResponse.Results[i].StatusCode.ToString());
                     }
 
                     Console.WriteLine();
                     Console.WriteLine("press enter to writing synchronous..");
                     Console.ReadLine();
 
-                    // Create a collection of nodes to write
+                    //create a WriteValueCollection and fill this with WriteValue objects
                     WriteValueCollection nodesToWrite = new WriteValueCollection();
                     WriteValue writeValue = new WriteValue();
-                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int16Value");
-                    writeValue.Value = new DataValue((Int16)(-16));
+                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature");
+                    writeValue.Value = new DataValue(25.5);
                     writeValue.AttributeId = Attributes.Value;
                     nodesToWrite.Add(writeValue);
 
                     writeValue = new WriteValue();
-                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int32Value");
+                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM");
                     writeValue.AttributeId = Attributes.Value;
-                    writeValue.Value = new DataValue(-3232);
+                    writeValue.Value = new DataValue(1750);
                     nodesToWrite.Add(writeValue);
 
                     writeValue = new WriteValue();
-                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Data.Static.Scalar.Int64Value");
+                    writeValue.NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure");
                     writeValue.AttributeId = Attributes.Value;
-                    writeValue.Value = new DataValue((Int64)(-64646464));
+                    writeValue.Value = new DataValue(1.05f);
                     nodesToWrite.Add(writeValue);
 
-                    // Write the node values synchronously
+                    //writing the nodes synchronous
                     StatusCodeCollection writeResults = client.Write(nodesToWrite);
 
                     for (int i = 0; i < writeResults.Count; i++)
                     {
-                        if (StatusCode.IsGood(writeResults[i]))
-                            Console.WriteLine("synchronous write result " + nodesToWrite[i].NodeId.ToString() + " Value => " + nodesToWrite[i].Value.ToString() + " StatusCode => " + writeResults[i].ToString());
-                        else
-                            Console.WriteLine("write failed for " + nodesToWrite[i].NodeId.ToString() + " StatusCode => " + writeResults[i].ToString());
+                        Console.WriteLine("synchronous write result " + nodesToWrite[i].NodeId.ToString() + " Value => " + nodesToWrite[i].Value.ToString() + " StatusCode => " + writeResults[i].ToString());
                     }
 
                     Console.WriteLine();
@@ -159,10 +205,7 @@ class Program
 
                     for (int i = 0; i < writeResponse.Results.Count; i++)
                     {
-                        if (StatusCode.IsGood(writeResponse.Results[i]))
-                            Console.WriteLine("asynchronous write result " + nodesToWrite[i].NodeId.ToString() + " Value => " + nodesToWrite[i].Value.ToString() + " StatusCode => " + writeResponse.Results[i].ToString());
-                        else
-                            Console.WriteLine("async write failed for " + nodesToWrite[i].NodeId.ToString() + " StatusCode => " + writeResponse.Results[i].ToString());
+                        Console.WriteLine("asynchronous write result " + nodesToWrite[i].NodeId.ToString() + " Value => " + nodesToWrite[i].Value.ToString() + " StatusCode => " + writeResponse.Results[i].ToString());
                     }
 
                     Console.WriteLine();
@@ -208,7 +251,7 @@ class Program
 
     void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
     {
-        // Handle server certificate validation
+        //external certificate validation
         if (ServiceResult.IsGood(e.Error))
             e.Accept = true;
         else if (!e.ContainsUnsuppressibleStatusCodes)
@@ -223,19 +266,19 @@ class Program
 
     private void Client_ServerConnected(object sender, EventArgs e)
     {
-        // Fired when the OPC UA session is successfully established
+        //event opc ua server is connected
         Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
     }
 
     private void Client_ServerConnectionLost(object sender, EventArgs e)
     {
-        // Fired when the connection to the OPC UA server is lost
+        //event connection to opc ua server lost
         Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
     }
 
     void Client_KeepAlive(ISession session, KeepAliveEventArgs e)
     {
-        // Fired periodically to indicate the server is still alive
+        //catch the keepalive event of opc ua server
     }
 
 }

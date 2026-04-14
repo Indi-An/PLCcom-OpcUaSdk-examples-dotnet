@@ -1,57 +1,126 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 11: Discover Server
+'
+' Before connecting to an OPC UA server, you need to know which endpoints
+' it offers. The discovery process queries the server for all available
+' endpoints including their security policies and transport protocols.
+'
+' This is always the first step when working with a new OPC UA server.
+' No session is created - discovery is an anonymous, lightweight call.
+'
+' What you will learn:
+'   * How to discover all registered servers at a URL (FindServers)
+'   * How to query the available endpoints (GetEndpoints)
+'   * How to read endpoint details (URL, security mode, security policy)
+'
+' Target server: opc.tcp://localhost:48410
+' (Start any of the Server SDK workshops first, e.g. Workshop 11)
+' ==============================================================================
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client.Sdk
 
 Public Class Program
     Public Shared Sub Main(ByVal args As String())
-        Dim p As Program = New Program()
-        p.Start()
-    End Sub
 
-    Private Sub Start()
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 11: Discover Server     ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  Before connecting to an OPC UA server, you need to know     ║")
+        Console.WriteLine("║  which endpoints it offers. This workshop queries the        ║")
+        Console.WriteLine("║  server for all registered applications and their endpoints. ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  What you will learn:                                        ║")
+        Console.WriteLine("║    * How to discover servers at a URL (FindServers)          ║")
+        Console.WriteLine("║    * How to query endpoints (GetEndpoints)                   ║")
+        Console.WriteLine("║    * How to read endpoint security details                   ║")
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+        Console.WriteLine()
+
         Try
-            'Submit your license information from your license e-mail
-            Dim LicenseUserName As String = "<Enter your UserName here>"
-            Dim LicenseSerial As String = "<Enter your Serial here>"
+            ' -- Step 1: Define the discovery URL ---------------------------------
+            ' This is the base URL of the OPC UA server you want to discover.
+            ' Start any of the Server SDK workshops first (e.g. Server Workshop 11).
+            Dim url As String = "opc.tcp://localhost:48410"
 
-            Dim url As String = "opc.tcp://localhost:50520/UA/DataAccessServer"
-            Console.WriteLine($"Start discover endpoints url: { url}")
+            Console.WriteLine("  Discovery URL: " & url)
+            Console.WriteLine("  Querying servers...")
+            Console.WriteLine()
 
-            'get all servers
+            ' -- Step 2: Find all registered servers ------------------------------
+            ' FindServers() sends a FindServers request to the discovery endpoint.
+            ' The server returns all applications it knows about, including their
+            ' application name, URI and discovery URLs.
+            ' The timeout (60000 ms) limits how long we wait for a response.
             Dim servers As ApplicationDescriptionCollection = UaClient.FindServers(New Uri(url), 60000)
 
-            ' populate the server list with the discovery URLs for the available servers.
+            Console.WriteLine($"  Found {servers.Count} server(s).")
+            Console.WriteLine()
+
             For Each server As ApplicationDescription In servers
 
-                ' don't show discovery servers.
+                ' Skip discovery servers - we only want application servers
                 If server.ApplicationType = ApplicationType.DiscoveryServer Then
                     Continue For
                 End If
 
+                Console.WriteLine($"  Server: {server.ApplicationName}")
+                Console.WriteLine($"  URI:    {server.ApplicationUri}")
+                Console.WriteLine()
+
+                ' -- Step 3: Get endpoints for each server ------------------------
+                ' GetEndpoints() returns all endpoints the server supports.
+                ' Each endpoint describes a URL, security mode, security policy
+                ' and the user token policies it accepts.
                 For Each discoveryUrl As String In server.DiscoveryUrls
-                    'Get Endpoints from server
                     Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(url), 60000)
 
                     If endpoints.Count > 0 Then
-                        Console.WriteLine("endpoints found:")
-                        Dim counter As Integer = 0
+                        Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
+                        Console.WriteLine()
 
+                        Dim counter As Integer = 0
                         For Each endpoint As EndpointDescription In endpoints
-                            Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString() } => { UaClient.EndpointToString(endpoint)}")
+                            Console.WriteLine($"  [{counter}] {UaClient.EndpointToString(endpoint)}")
+                            counter += 1
                         Next
                     Else
-                        Console.WriteLine("no discovery endpoints found")
+                        Console.WriteLine("  No endpoints found.")
                     End If
                 Next
             Next
 
-            Console.WriteLine("End getting Endports from UA Application")
             Console.WriteLine()
-            Console.WriteLine("press enter for exit")
-            Console.ReadLine()
+            Console.WriteLine("  Discovery complete.")
+
         Catch ex As Exception
-            Console.WriteLine(ex)
-            Console.WriteLine("press enter for exit")
-            Console.ReadLine()
+            Console.WriteLine("  Error: " & ex.Message)
         End Try
+
+        Console.WriteLine()
+        Console.WriteLine("  Press ENTER to exit.")
+        Console.ReadLine()
+
     End Sub
 End Class

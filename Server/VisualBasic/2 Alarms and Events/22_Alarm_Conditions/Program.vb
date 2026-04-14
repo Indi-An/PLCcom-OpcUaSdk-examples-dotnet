@@ -1,3 +1,24 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Server.Sdk
 Imports System
@@ -23,7 +44,7 @@ Imports System.Threading
 '   * How to set alarm severity
 '   * How clients acknowledge alarms in the Alarm & Conditions view
 '
-' Connect with any OPC UA client to: opc.tcp://localhost:48421
+' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
 
 Module Program
@@ -50,7 +71,10 @@ Module Program
             .ApplicationName = "PLCcom Workshop 22 - Alarm Conditions",
             .ApplicationUri = "urn:localhost:PLCcom:Workshop:22",
             .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48421"},
+            .BaseAddresses = New List(Of String) From {
+                "opc.tcp://localhost:48410",
+                "opc.https://localhost:48411"
+            },
             .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
             .UserTokenPolicies = New List(Of UserTokenPolicy) From {
                 New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
@@ -100,7 +124,7 @@ Module Program
 
             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
             Console.WriteLine("║  Server is running. Connect with any OPC UA client to:       ║")
-            Console.WriteLine("║  opc.tcp://localhost:48421                                   ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
             Console.WriteLine("║                                                              ║")
             Console.WriteLine("║  To see alarms:                                              ║")
             Console.WriteLine("║  1. Open Document -> Add -> Event View                       ║")
@@ -153,7 +177,7 @@ Module Program
                     Console.WriteLine($"{vbLf}  ALARM OFF: Pressure = {p:F2} bar")
                 End If
 
-                Console.Write($"{Chr(13)}  T={temperature.Value:F1}C{If(tempActive, " !", "  ")}  " &
+                Console.Write($"{vbCr}  T={temperature.Value:F1}C{If(tempActive, " !", "  ")}  " &
                               $"P={pressure.Value:F2}bar{If(pressActive, " !", "  ")}  ")
                 Thread.Sleep(1000)
             End While

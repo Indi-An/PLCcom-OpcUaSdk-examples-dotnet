@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,9 +6,8 @@
     <Company>Indi.An GmbH</Company>
     <RootNamespace>DA_Read_Write_by_Path</RootNamespace>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.1.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.2.*" />
   </ItemGroup>
 
 </Project>

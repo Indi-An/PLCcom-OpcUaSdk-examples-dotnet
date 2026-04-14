@@ -6,9 +6,8 @@
     <Company>Indi.An GmbH</Company>
     <RootNamespace>Simple_Events</RootNamespace>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.1.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.2.*" />
   </ItemGroup>
 
 </Project>

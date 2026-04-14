@@ -1,3 +1,40 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 71: Reverse Connect
+'
+' In standard OPC UA, the client connects to the server. With
+' Reverse Connect, the server initiates the TCP connection to the
+' client. This is useful when the server is behind a firewall
+' and cannot accept incoming connections.
+'
+' What you will learn:
+'   * How Reverse Connect differs from standard connections
+'   * How to configure the client for Reverse Connect
+'   * How to wait for the server to connect back
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports System
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
@@ -37,6 +74,24 @@ Public Class Program
 
     Private Sub Start()
         Try
+            Console.WriteLine()
+
+            Console.WriteLine()
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 71: Reverse Connect     ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  With Reverse Connect, the server initiates the TCP          ║")
+             Console.WriteLine("║  connection to the client. Useful when the server is         ║")
+             Console.WriteLine("║  behind a firewall and cannot accept connections.            ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * How Reverse Connect differs from standard mode          ║")
+             Console.WriteLine("║    * Configure the client for Reverse Connect                ║")
+             Console.WriteLine("║    * Wait for the server to connect back                     ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
             ' TODO: Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
@@ -49,7 +104,7 @@ Public Class Program
             ' and to configure the OPC UA session (security mode, policy, etc.).
             ' This is the server's normal endpoint, NOT the reverse-connect listen URL.
             Dim endpoint As EndpointDescription = New EndpointDescription With {
-                .EndpointUrl = "opc.tcp://localhost:48460",
+                .EndpointUrl = "opc.tcp://localhost:48410",
                 .SecurityMode = MessageSecurityMode.None,
                 .SecurityPolicyUri = SecurityPolicies.None,
                 .TransportProfileUri = Profiles.UaTcpTransport
@@ -166,7 +221,7 @@ Public Class Program
         ElseIf Not e.ContainsUnsuppressibleStatusCodes Then
             e.Accept = True
         ElseIf e.ContainsUnsuppressibleStatusCodes Then
-            e.AcceptAll = True
+            e.AcceptAll = True ' You can accept all unsuppressible status codes with this flag
         Else
             Throw New Exception(String.Format("Failed to validate certificate with error code {0}: {1}",
                 e.Error.Code, e.Error.AdditionalInfo))

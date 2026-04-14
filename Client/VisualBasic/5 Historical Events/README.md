@@ -1,11 +1,7 @@
-# 5 Complex Datatypes – Examples
+# 5 Complex Datatypes — Client (Visual Basic)
 
-This folder contains examples for working with complex (structured) OPC UA data types.
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 51 | Complex Types | Read and decode structured/complex data types, load type dictionaries, monitor complex values |
 
----
-
-## Examples
-
-### 51_Complexe_Types
-Load the server's type system, read and write complex structured data types,
-and monitor them via subscriptions. Demonstrates the ComplexTypeSystem API.
+**Target server:** `opc.tcp://localhost:48410` (Server Workshop 15 — Custom Types)

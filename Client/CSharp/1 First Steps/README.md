@@ -1,34 +1,15 @@
-# 1 First Steps – Examples
+# 1 First Steps — Client (C#)
 
-This folder contains introductory examples for getting started with the PLCcom.Opc.Ua.Sdk.
-Each subfolder is a standalone sample project.
+These workshops cover the basics of connecting to an OPC UA server.
 
----
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 11 | Discover Server | Find available OPC UA servers on the network |
+| 12 | Connect Endpoint | Connect to a server endpoint and establish a session |
+| 13 | Connect with User Auth | Authenticate with username and password |
+| 14 | Connect with Cert Auth | Authenticate with X.509 certificates |
+| 15 | Browse by NodeId | Navigate the address space using NodeIds |
+| 16 | Browse by Path | Navigate the address space using browse paths |
+| 19 | Enable Debug Tracing | Enable diagnostic tracing for troubleshooting |
 
-## Recommended order
-
-### 11_Discover_Server
-Discover OPC UA servers and their endpoints on the network.
-
-### 12_Connect_Endpoint
-Connect to an OPC UA server endpoint with default security.
-
-### 13_Connect_with_User_Auth
-Connect using username/password authentication.
-
-### 14_Connect_with_Cert_Auth
-Connect using X.509 certificate-based authentication.
-
-### 15_Browse_by_NodeId
-Browse the OPC UA address space using NodeIds.
-
-### 16_Browse_by_Path
-Browse the OPC UA address space using browse paths (e.g. `Objects.Server`).
-
----
-
-## Common prerequisites
-
-1. Enter your license credentials (`LicenseUserName` / `LicenseSerial`)
-2. Configure the OPC UA server endpoint URL
-3. Visual Studio 2022 or higher (VS2026 recommended)
+**Target server:** `opc.tcp://localhost:48410` (Server Workshop 11)

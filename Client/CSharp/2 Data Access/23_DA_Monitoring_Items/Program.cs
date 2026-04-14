@@ -1,3 +1,41 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 23: Monitoring Items (Subscriptions)
+//
+// OPC UA subscriptions let you monitor value changes without polling.
+// The server pushes DataChange notifications to the client whenever a
+// monitored value changes. This is the most efficient way to track
+// live process data.
+//
+// What you will learn:
+//   * How to create a Subscription with a publishing interval
+//   * How to add MonitoredItems to a subscription
+//   * How to receive DataChange notifications via events
+//   * How to manage subscription lifecycle (enable, modify, dispose)
+//
+// Target server: opc.tcp://localhost:48410
+// ==============================================================================
+
 using System;
 using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Client;
@@ -20,13 +58,31 @@ class Program
         try
         {
 
+             Console.WriteLine();
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 23: Monitoring Items    ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  OPC UA subscriptions push DataChange notifications to       ║");
+             Console.WriteLine("║  the client whenever a monitored value changes.              ║");
+             Console.WriteLine("║  No polling needed - the most efficient approach.            ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  What you will learn:                                        ║");
+             Console.WriteLine("║    * Create a Subscription with a publishing interval        ║");
+             Console.WriteLine("║    * Add MonitoredItems to a subscription                    ║");
+             Console.WriteLine("║    * Receive DataChange notifications via events             ║");
+             Console.WriteLine("║    * Manage subscription lifecycle                           ║");
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+             Console.WriteLine();
+
+            //TODO
             //Submit your license information from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
 
-            // Sort endpoints by security level (highest security first)
+            //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
 
             if (Endpoints.Count > 0)
@@ -45,46 +101,46 @@ class Program
                 int iNumberOfEndpoint = -1;
                 if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
                 {
-                    // Create a SessionConfiguration with the selected endpoint and application name
+                    //create a a SessionConfiguration with the selected endpoint and application name
                     SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                                                                                          Endpoints[iNumberOfEndpoint]);
 
-                    // Enable AutoConnect - the client will connect and reconnect automatically
+                    //enable auto connect functionality
                     sessionConfiguration.AutoConnect = true;
 
-                    // Display the certificate store path for debugging purposes
+                    //output certificate store path
                     Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
 
-                    // Create a new OPC UA client instance with license credentials
+                    //Create a new opc client instance and pass your license information
                     using (UaClient client = new UaClient(LicenseUserName, LicenseSerial, sessionConfiguration))
                     {
                         Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
                         Console.WriteLine("");
 
-                        // Register event handlers to monitor the connection state
+                        //register events
                         client.ServerConnectionLost += Client_ServerConnectionLost;
                         client.ServerConnected += Client_ServerConnected;
                         client.SessionClosing += Client_SessionClosing;
                         client.KeepAlive += Client_KeepAlive;
                         client.CertificateValidation += client_CertificateValidation;
 
-                        // Create a new subscription for monitoring data changes
+                        //create a new subscription
                         using (Subscription subscription = new Subscription())
                         {
                             subscription.PublishingInterval = 1000;
                             subscription.PublishingEnabled = false;
                             subscription.DisplayName = "mySubsription";
 
-                            // Register subscription state change events
+                            //register subscription events
                             subscription.StateChanged += Subscription_StateChanged;
                             subscription.PublishStatusChanged += Subscription_PublishStatusChanged;
 
-                            // Add the subscription to the client instance
+                            //add new subscription to client
                             client.AddSubscription(subscription);
                             try
                             {
-                                // Create a monitored item for the specified node
-                                NodeId nodeId = client.GetNodeIdByPath("Objects.Simulation.Random");
+                                //Create a monitoring item and add to the subscription
+                                NodeId nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature");
                                 MonitoredItem monitoredItem = new MonitoredItem(subscription.DefaultItem)
                                 {
                                     StartNodeId = nodeId,
@@ -93,12 +149,12 @@ class Program
                                     DisplayName = nodeId.ToString()
                                 };
 
-                                // Register the notification callback for value changes
+                                //register monitoring event
                                 monitoredItem.Notification += Client_MonitorNotification;
-                                // Add the monitored item to the subscription
+                                //add Item to subscription
                                 subscription.AddItem(monitoredItem);
 
-                                 nodeId = client.GetNodeIdByPath("Objects.Simulation.Counter");
+                                 nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.IsRunning");
                                 monitoredItem = new MonitoredItem(subscription.DefaultItem)
                                 {
                                     StartNodeId = nodeId,
@@ -107,15 +163,15 @@ class Program
                                     DisplayName = nodeId.ToString()
                                 };
 
-                                // Register the notification callback for value changes
+                                //register monitoring event
                                 monitoredItem.Notification += Client_MonitorNotification;
-                                // Add the monitored item to the subscription
+                                //add Item to subscription
                                 subscription.AddItem(monitoredItem);
 
-                                // Apply all pending changes to the subscription (creates monitored items on the server)
+                                //apply changes
                                 subscription.ApplyChanges();
 
-                                // Enable publishing mode and apply the configured PublishingInterval
+                                //enable publishing mode of subscription and set PublishingInterval
                                 subscription.SetPublishingMode(true);
                                 subscription.Modify();
                             }
@@ -156,11 +212,14 @@ class Program
         }
     }
 
+
+
     private void Client_MonitorNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
     {
         MonitoredItemNotification notification = e.NotificationValue as MonitoredItemNotification;
         Console.WriteLine(monitoredItem.StartNodeId.Identifier + " Value: " + notification.Value + " Status: " + notification.Value.StatusCode.ToString());
     }
+
 
     private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
     {
@@ -188,7 +247,7 @@ class Program
 
     void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
     {
-        // Handle server certificate validation
+        //external certificate validation
         if (ServiceResult.IsGood(e.Error))
             e.Accept = true;
         else if (!e.ContainsUnsuppressibleStatusCodes)
@@ -201,21 +260,22 @@ class Program
         }
     }
 
+
     private void Client_ServerConnected(object sender, EventArgs e)
     {
-        // Fired when the OPC UA session is successfully established
+        //event opc ua server is connected
         Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
     }
 
     private void Client_ServerConnectionLost(object sender, EventArgs e)
     {
-        // Fired when the connection to the OPC UA server is lost
+        //event connection to opc ua server lost
         Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
     }
 
     void Client_KeepAlive(ISession session, KeepAliveEventArgs e)
     {
-        // Fired periodically to indicate the server is still alive
+        //catch the keepalive event of opc ua server
     }
 
     private void Client_SessionClosing(object sender, EventArgs e)

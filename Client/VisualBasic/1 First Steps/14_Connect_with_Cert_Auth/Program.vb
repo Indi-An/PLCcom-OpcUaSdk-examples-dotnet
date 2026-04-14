@@ -1,124 +1,168 @@
-Imports System
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 14: Connect with Certificate Authentication
+'
+' Workshop 13 used username/password. For machine-to-machine communication,
+' X.509 certificate authentication is more secure and does not require
+' storing passwords. The client presents a certificate and the server
+' validates it against its trusted certificate store.
+'
+' What you will learn:
+'   * How to load an X.509 certificate from a .pfx/.p12 file
+'   * How to set certificate-based UserIdentity on a session
+'   * How certificate authentication differs from username/password
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
+Imports System
 Imports System.Security.Cryptography.X509Certificates
-Imports System.Reflection
 
 Public Class Program
+
     Public Shared Sub Main(ByVal args As String())
-        Dim p As Program = New Program()
+        Dim p As New Program()
         p.Start()
     End Sub
 
     Private Sub Start()
+
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 14: Certificate Auth    ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  For machine-to-machine communication, X.509 certificate     ║")
+        Console.WriteLine("║  authentication is more secure than username/password.       ║")
+        Console.WriteLine("║  The client presents a certificate that the server validates ║")
+        Console.WriteLine("║  against its trusted certificate store.                      ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  What you will learn:                                        ║")
+        Console.WriteLine("║    * Load an X.509 certificate from a .pfx file              ║")
+        Console.WriteLine("║    * Set certificate-based UserIdentity on a session         ║")
+        Console.WriteLine("║    * Difference to username/password authentication          ║")
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+        Console.WriteLine()
+
         Try
-            'Submit your license information from your license e-mail
+            ' -- License ----------------------------------------------------------
+            ' TODO: Replace with your license credentials from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/UA/DataAccessServer"), 60000)
+            ' -- Step 1: Discover and select endpoint -----------------------------
+            Dim serverUrl As String = "opc.tcp://localhost:48410"
 
-            'Sort endpoints by security level (highest security first)
-            Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
+            Console.WriteLine("  Server URL: " & serverUrl)
+            Console.WriteLine("  Discovering endpoints...")
+            Console.WriteLine()
 
-            If Endpoints.Count > 0 Then
-                Console.WriteLine("endpoints found:")
-                Dim counter As Integer = 0
+            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), 60000)
+            endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints)
 
-                For Each endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString() } => { UaClient.EndpointToString(endpoint)}")
-                Next
-
-                Console.WriteLine("please enter index of desired endpoint")
-                Dim NumberOfEndpoint As String = Console.ReadLine()
-                Dim iNumberOfEndpoint As Integer = -1
-
-                If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
-                    Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
-                    'Disable AutoConnect - we will connect manually in this example
-                    sessionConfiguration.AutoConnect = False
-
-                    'set certificate authentification
-                    'load certificate
-                    Dim certPath As String = "<path to certificate>"
-                    Dim certPassword As String = "<password of certificate>"
-#If NET9_0_OR_GREATER Then
-                    Dim certificate As X509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(certPath, certPassword)
-#Else
-                    Dim certificate As X509Certificate2 = New X509Certificate2(certPath, certPassword)
-#End If
-                    sessionConfiguration.Identity = New UserIdentity(certificate)
-
-                    'Display the certificate store path for debugging purposes
-                    Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
-
-                    'Create a new OPC UA client instance with license credentials
-                    Dim client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
-                    Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
-
-                    'Register event handlers to monitor the connection state
-                    AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
-                    AddHandler client.ServerConnected, AddressOf Client_ServerConnected
-                    AddHandler client.KeepAlive, AddressOf Client_KeepAlive
-                    AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-
-                    Try
-                        'connect client
-
-                        client.Connect() 'Connect client, not needed if sessionConfiguration.AutoConnect = true
-                        Console.WriteLine(client.GetSessionState().ToString())
-                        Console.WriteLine()
-                        Console.WriteLine("press enter for exit")
-                        Console.ReadLine()
-                        Return
-                    Finally
-                        If client.GetSessionState() = SessionState.Connected Then client.Disconnect()
-                    End Try
-                Else
-                    Console.WriteLine()
-                    Console.WriteLine("invalid number of Endpoint")
-                End If
-            Else
-                Console.WriteLine()
-                Console.WriteLine("no endpoints found")
+            If endpoints.Count = 0 Then
+                Console.WriteLine("  No endpoints found. Is the server running?")
+                Console.ReadLine()
+                Return
             End If
 
+            Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
             Console.WriteLine()
-            Console.WriteLine("press enter for exit")
+            For i As Integer = 0 To endpoints.Count - 1
+                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints(i))}")
+            Next
+
+            Console.WriteLine()
+            Console.Write("  Please enter index of desired endpoint: ")
+            Dim input As String = Console.ReadLine()
+            Dim index As Integer = -1
+            If Not Integer.TryParse(input, index) OrElse index < 0 OrElse index >= endpoints.Count Then
+                Console.WriteLine("  Invalid endpoint index.")
+                Console.ReadLine()
+                Return
+            End If
+
+            ' -- Step 2: Build SessionConfiguration with certificate identity -----
+            Dim sessionConfig As SessionConfiguration = SessionConfiguration.Build(
+                "PLCcom_Workshop_14", endpoints(index))
+            sessionConfig.AutoConnect = False
+
+            ' Load the user certificate from a .pfx/.p12 file.
+            ' TODO: Replace with the path and password of your user certificate
+            Dim certPath As String = "<path to certificate>"
+            Dim certPassword As String = "<password of certificate>"
+#If NET9_0_OR_GREATER Then
+            Dim certificate As X509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(certPath, certPassword)
+#Else
+            Dim certificate As New X509Certificate2(certPath, certPassword)
+#End If
+            sessionConfig.Identity = New UserIdentity(certificate)
+
+            Console.WriteLine()
+            Console.WriteLine("  Certificate store: " & sessionConfig.CertificateStorePath)
+
+            ' -- Step 3: Create client and register events ------------------------
+            Dim client As New UaClient(LicenseUserName, LicenseSerial, sessionConfig)
+            Console.WriteLine("  License: " & client.GetLicenceMessage())
+            Console.WriteLine()
+
+            AddHandler client.ServerConnected, Sub(s, e)
+                Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss} Session established")
+            End Sub
+            AddHandler client.ServerConnectionLost, Sub(s, e)
+                Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss} Connection lost")
+            End Sub
+            AddHandler client.KeepAlive, Sub(session, e)
+            End Sub
+            AddHandler client.CertificateValidation, Sub(sender, e)
+                e.Accept = True
+            End Sub
+
+            ' -- Step 4: Connect --------------------------------------------------
+            Console.Write("  Connecting with certificate ... ")
+            client.Connect()
+            Console.WriteLine("OK")
+            Console.WriteLine($"  Session state: {client.GetSessionState()}")
+            Console.WriteLine()
+
+            ' -- Step 5: Disconnect -----------------------------------------------
+            Console.WriteLine("  Press ENTER to disconnect and exit.")
             Console.ReadLine()
+
+            If client.GetSessionState() = SessionState.Connected Then
+                client.Disconnect()
+            End If
+
+            Console.WriteLine("  Disconnected.")
+
         Catch ex As Exception
-            Console.WriteLine(ex)
-            Console.WriteLine("press enter for exit")
+            Console.WriteLine("  Error: " & ex.Message)
+            Console.WriteLine()
+            Console.WriteLine("  Press ENTER to exit.")
             Console.ReadLine()
         End Try
+
     End Sub
 
-    Private Sub client_CertificateValidation(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
-        ' External certificate validation
-        If ServiceResult.IsGood(e.Error) Then
-            e.Accept = True
-        ElseIf Not e.ContainsUnsuppressibleStatusCodes Then
-            e.Accept = True
-        ElseIf e.ContainsUnsuppressibleStatusCodes Then
-            e.AcceptAll = True ' You can accept all unsuppressible status codes with this flag
-        Else
-            Throw New Exception(String.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo))
-        End If
-    End Sub
-
-    Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
-        Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
-    End Sub
-
-    Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
-        Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
-    End Sub
-
-    Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
-    End Sub
 End Class

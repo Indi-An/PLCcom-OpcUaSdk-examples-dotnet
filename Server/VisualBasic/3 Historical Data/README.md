@@ -1,15 +1,9 @@
-# 3 Historical Data – Server Examples
+# 3 Historical Data — Server (Visual Basic)
 
-This folder contains examples for providing historical data from an OPC UA server.
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 31 | Historical Access | Store and serve historical data values |
+| 32 | Historical Update | Insert, update, replace and delete historical values |
+| 33 | Historical Events | Record and serve historical events |
 
----
-
-## Examples
-
-### 31_Historical_Access
-Enables history recording on variables (`Historizing = true`) and stores values in an in-memory
-circular buffer (max 500 entries per variable). Records temperature and humidity every second with
-explicit timestamps. Clients can retrieve the stored values using the OPC UA `HistoryRead` service
-and display them in a history trend view.
-
-Endpoint: `opc.tcp://localhost:48430`
+**Default endpoint:** `opc.tcp://localhost:48410` and `opc.https://localhost:48411`

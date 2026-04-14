@@ -1,3 +1,24 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 // ==============================================================================
 // PLCcom OPC UA Server SDK - Workshop 31: Historical Access
 //
@@ -22,7 +43,7 @@
 //   * How to record values with timestamps
 //   * How clients read historical data
 //
-// Connect with any OPC UA client to: opc.tcp://localhost:48430
+// Connect with any OPC UA client to: opc.tcp://localhost:48410
 // ==============================================================================
 
 using PLCcom.Opc.Ua;
@@ -53,7 +74,11 @@ var config = new UaServerConfiguration
     ApplicationName = "PLCcom Workshop 31 - Historical Access",
     ApplicationUri  = "urn:localhost:PLCcom:Workshop:31",
     ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses   = new List<string> { "opc.tcp://localhost:48430" },
+    BaseAddresses = new List<string>
+    {
+        "opc.tcp://localhost:48410",
+        "opc.https://localhost:48411"
+    },
     SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
     UserTokenPolicies = new List<UserTokenPolicy>
     {
@@ -98,7 +123,7 @@ Console.WriteLine();
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  Server is running. Connect with any OPC UA client to:       ║");
-Console.WriteLine("║  opc.tcp://localhost:48430                                   ║");
+Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
 Console.WriteLine("║                                                              ║");
 Console.WriteLine("║  To view history:                                            ║");
 Console.WriteLine("║  1. Press ENTER to start recording values                    ║");

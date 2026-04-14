@@ -1,11 +1,7 @@
-# 6 Simple Events – Examples
+# 6 Simple Events — Client (C#)
 
-This folder contains examples for subscribing to OPC UA server events.
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 61 | Simple Events | Create event subscriptions with filters, receive and display event notifications |
 
----
-
-## Examples
-
-### 61_Simple_Events
-Subscribe to BaseEventType events from the server node using an EventFilter.
-Receives Message, Severity and Time fields for each event notification.
+**Target server:** `opc.tcp://localhost:48410` (Server Workshop 21 — Simple Events)

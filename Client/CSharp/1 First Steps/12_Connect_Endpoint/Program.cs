@@ -1,142 +1,183 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 12: Connect to Endpoint
+//
+// Demonstrates the full connect/disconnect lifecycle of a UaClient session.
+// All available endpoints are discovered, displayed and the user selects one
+// interactively. For secured endpoints the SDK creates an application
+// instance certificate automatically.
+//
+// What you will learn:
+//   * How to discover and sort endpoints by security level
+//   * How to select an endpoint interactively
+//   * How to create a SessionConfiguration from an endpoint
+//   * How to register event handlers (Connected, ConnectionLost, KeepAlive)
+//   * How to handle server certificate validation
+//   * How to connect and disconnect cleanly
+//
+// Target server: opc.tcp://localhost:48410
+// ==============================================================================
+
+using PLCcom.Opc.Ua;
+using PLCcom.Opc.Ua.Client;
 using PLCcom.Opc.Ua.Client.Sdk;
 using System;
-using PLCcom.Opc.Ua.Client;
-using PLCcom.Opc.Ua;
 
 class Program
 {
     static void Main(string[] args)
     {
-        Program program = new Program();
-        program.Start();
+        new Program().Start();
     }
 
     void Start()
     {
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 12: Connect Endpoint    ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Connecting to an OPC UA server requires discovering its     ║");
+        Console.WriteLine("║  endpoints first and selecting the right one. This workshop  ║");
+        Console.WriteLine("║  shows the full connect/disconnect lifecycle.                ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  What you will learn:                                        ║");
+        Console.WriteLine("║    * Discover and sort endpoints by security level           ║");
+        Console.WriteLine("║    * Create a SessionConfiguration from an endpoint          ║");
+        Console.WriteLine("║    * Register KeepAlive and ConnectionState events           ║");
+        Console.WriteLine("║    * Handle server certificate validation                    ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+
         try
         {
-
-            // Discover available endpoints from the OPC UA server
-            //Submit your license information from your license e-mail
+            // -- License ----------------------------------------------------------
+            // TODO: Replace with your license credentials from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000);
+            // -- Step 1: Discover and sort endpoints ------------------------------
+            // GetEndpoints() queries the server for all available endpoints.
+            // SortEndpointsBySecurityLevel() puts the least secure (None) first,
+            // making index 0 the easiest to connect to for testing.
+            string serverUrl = "opc.tcp://localhost:48410";
 
-            // Sort endpoints by security level (highest security first)
-            Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
+            Console.WriteLine("  Server URL: " + serverUrl);
+            Console.WriteLine("  Discovering endpoints...");
+            Console.WriteLine();
 
-            if (Endpoints.Count > 0)
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
+
+            if (endpoints.Count == 0)
             {
-                Console.WriteLine("endpoints found:");
-                int counter = 0;
-                foreach (EndpointDescription endpoint in Endpoints)
-                {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(endpoint));
-                }
-
-                // Let the user select an endpoint
-                Console.WriteLine("please enter index of desired endpoint");
-                string NumberOfEndpoint = Console.ReadLine();
-                int iNumberOfEndpoint = -1;
-                if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
-                {
-                    // Create a SessionConfiguration with the selected endpoint and application name
-                    SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                                                                                            Endpoints[iNumberOfEndpoint]);
-                    // Disable AutoConnect - we will connect manually in this example
-                    sessionConfiguration.AutoConnect = false;
-
-                    // Display the certificate store path for debugging purposes
-                    Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
-
-                    // Create a new OPC UA client instance with license credentials
-                    UaClient client = new UaClient(LicenseUserName, LicenseSerial, sessionConfiguration);
-                    Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
-
-                    // Register event handlers to monitor the connection state
-                    client.ServerConnectionLost += Client_ServerConnectionLost;
-                    client.ServerConnected += Client_ServerConnected;
-                    client.KeepAlive += Client_KeepAlive;
-                    client.CertificateValidation += client_CertificateValidation;
-                    try
-                    {
-                        // Manually connect to the server (not needed if AutoConnect = true)
-                        client.Connect();
-                        Console.WriteLine(client.GetSessionState().ToString());
-
-                        Console.WriteLine();
-                        Console.WriteLine("press enter for exit");
-                        Console.ReadLine();
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex);
-                        Console.WriteLine("press enter for exit");
-                        Console.ReadLine();
-                    }
-                    finally
-                    {
-                        // Always disconnect when done
-                        if (client.GetSessionState() == SessionState.Connected) client.Disconnect();
-                    }
-
-                }
-                else
-                {
-                    Console.WriteLine();
-                    Console.WriteLine("invalid number of Endpoint");
-                }
+                Console.WriteLine("  No endpoints found. Is the server running?");
+                Console.ReadLine();
+                return;
             }
-            else
+
+            // -- Step 2: Display endpoints and let user choose --------------------
+            Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
+            Console.WriteLine();
+            for (int i = 0; i < endpoints.Count; i++)
+                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+
+            Console.WriteLine();
+            Console.Write("  Please enter index of desired endpoint: ");
+            string input = Console.ReadLine();
+
+            if (!int.TryParse(input, out int index) || index < 0 || index >= endpoints.Count)
             {
-                Console.WriteLine();
-                Console.WriteLine("no endpoints found");
+                Console.WriteLine("  Invalid endpoint index.");
+                Console.ReadLine();
+                return;
             }
 
             Console.WriteLine();
-            Console.WriteLine("press enter for exit");
+            Console.WriteLine($"  Selected: {UaClient.EndpointToString(endpoints[index])}");
+            Console.WriteLine();
+
+            // -- Step 3: Build SessionConfiguration -------------------------------
+            // SessionConfiguration.Build() creates a configuration from the selected
+            // endpoint. It sets up the application name, certificate store path and
+            // security settings automatically.
+            SessionConfiguration sessionConfig = SessionConfiguration.Build(
+                "PLCcom_Workshop_12", endpoints[index]);
+
+            // AutoConnect = false means we call Connect() explicitly below.
+            // Set to true if you want the client to connect as soon as it is created.
+            sessionConfig.AutoConnect = false;
+
+            Console.WriteLine("  Certificate store: " + sessionConfig.CertificateStorePath);
+
+            // -- Step 4: Create client and register events ------------------------
+            // The UaClient manages the OPC UA session. Pass your license credentials
+            // and the session configuration.
+            UaClient client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
+            Console.WriteLine("  License: " + client.GetLicenceMessage());
+            Console.WriteLine();
+
+            // ServerConnected fires when the session is established.
+            client.ServerConnected += (s, e) =>
+                Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss} Session established");
+
+            // ServerConnectionLost fires when the connection drops unexpectedly.
+            // The SDK will attempt automatic reconnection.
+            client.ServerConnectionLost += (s, e) =>
+                Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss} Connection lost");
+
+            // KeepAlive fires periodically to confirm the server is still alive.
+            client.KeepAlive += (session, e) => { };
+
+            // CertificateValidation is called when the server presents its certificate.
+            // Accept all certificates for development. In production, verify against
+            // a trusted certificate store.
+            client.CertificateValidation += (sender, e) =>
+            {
+                e.Accept = true;
+                Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
+            };
+
+            // -- Step 5: Connect --------------------------------------------------
+            Console.Write("  Connecting ... ");
+            client.Connect();
+            Console.WriteLine("OK");
+            Console.WriteLine($"  Session state: {client.GetSessionState()}");
+            Console.WriteLine();
+
+            // -- Step 6: Disconnect -----------------------------------------------
+            Console.WriteLine("  Press ENTER to disconnect and exit.");
             Console.ReadLine();
+
+            if (client.GetSessionState() == SessionState.Connected)
+                client.Disconnect();
+
+            Console.WriteLine("  Disconnected.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex);
-            Console.WriteLine("press enter for exit");
+            Console.WriteLine("  Error: " + ex.Message);
+            Console.WriteLine();
+            Console.WriteLine("  Press ENTER to exit.");
             Console.ReadLine();
         }
-
-    }
-
-    void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
-    {
-        // Handle server certificate validation
-        if (ServiceResult.IsGood(e.Error))
-            e.Accept = true;
-        else if (!e.ContainsUnsuppressibleStatusCodes)
-            e.Accept = true;
-        else if (e.ContainsUnsuppressibleStatusCodes)
-            e.AcceptAll = true; // Accept all unsuppressible status codes (e.g. wrong hostname during debugging)
-        else
-        {
-            throw new Exception(string.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo));
-        }
-    }
-
-    private void Client_ServerConnected(object sender, EventArgs e)
-    {
-        // Fired when the OPC UA session is successfully established
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
-    }
-
-    private void Client_ServerConnectionLost(object sender, EventArgs e)
-    {
-        // Fired when the connection to the OPC UA server is lost
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
-    }
-
-    void Client_KeepAlive(ISession session, KeepAliveEventArgs e)
-    {
-        // Fired periodically to indicate the server is still alive
     }
 }

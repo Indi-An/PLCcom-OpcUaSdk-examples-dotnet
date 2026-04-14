@@ -1,3 +1,42 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 21: Read and Write by NodeId
+'
+' A NodeId is the unique address of a node in the OPC UA address space.
+' It consists of a namespace index and an identifier (numeric, string,
+' GUID or opaque). This is the low-level approach to reading and writing.
+' See Workshop 22 for the more readable path-based approach.
+'
+' What you will learn:
+'   * How to construct NodeIds from string notation (ns=2;i=X)
+'   * How to resolve browse paths to NodeIds (GetNodeIdByPath)
+'   * How to read single and multiple values by NodeId
+'   * How to read values asynchronously (ReadAsync)
+'   * How to write values synchronously and asynchronously
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports System
 Imports PLCcom.Opc.Ua.Client.Sdk
 Imports PLCcom.Opc.Ua.Client
@@ -16,13 +55,30 @@ Public Class Program
     Private Sub Start()
         Try
 
+         Console.WriteLine()
+
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 21: Read/Write by NodeId║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  A NodeId is the unique address of a node in the OPC UA      ║")
+             Console.WriteLine("║  address space (e.g. ns=2;i=10219). This workshop shows      ║")
+             Console.WriteLine("║  how to read and write values using NodeIds directly.        ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Construct NodeIds from string notation                  ║")
+             Console.WriteLine("║    * Read single and multiple values (sync and async)        ║")
+             Console.WriteLine("║    * Write values and check the StatusCode                   ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -39,21 +95,21 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
                     'enable autoconnect
                     sessionConfiguration.AutoConnect = True
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+                    'Create a new opc client instance and pass your license information
                     client = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                     Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
                     Console.WriteLine("")
 
-                    'Register event handlers to monitor the connection state
+                    'register events
                     AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                     AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                     AddHandler client.KeepAlive, AddressOf Client_KeepAlive
@@ -64,33 +120,34 @@ Public Class Program
 
                     'Read multiple Nodes within one call 
 
+                    'Resolve browse paths to NodeIds first
+                    Dim temperatureId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature")
+                    Dim rpmId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM")
+                    Dim pressureId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure")
+
                     'first create a ReadValueIdCollection and fill this with ReadValueId objects
                     Dim nodesToRead As ReadValueIdCollection = New ReadValueIdCollection()
                     Dim nodeToRead As ReadValueId = New ReadValueId()
-                    nodeToRead.NodeId = New NodeId("ns=2;i=10219") 'Objects.Data.Static.Scalar.Int16Value
+                    nodeToRead.NodeId = temperatureId 'Objects.Plant.Line1.Machine1.Temperature
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = New NodeId("ns=2;i=10221") 'Objects.Data.Static.Scalar.Int32Value
+                    nodeToRead.NodeId = rpmId 'Objects.Plant.Line1.Machine1.RPM
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = New NodeId("ns=2;i=10223") 'Objects.Data.Static.Scalar.Int64Value
+                    nodeToRead.NodeId = pressureId 'Objects.Plant.Line1.Machine1.Pressure
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
-                    'Read the node values synchronously
+                    'reading the nodes synchronous
                     Dim readresults As DataValueCollection = client.Read(nodesToRead)
 
                     For i As Integer = 0 To readresults.Count - 1
                         Dim res As DataValue = readresults(i)
-                        If StatusCode.IsGood(res.StatusCode) Then
-                            Console.WriteLine($"synchronous read result { nodesToRead(i).NodeId.ToString() } Value => { res.Value.ToString() } StatusCode => { res.StatusCode.ToString()}")
-                        Else
-                            Console.WriteLine($"read failed for { nodesToRead(i).NodeId.ToString() } StatusCode => { res.StatusCode.ToString()}")
-                        End If
+                        Console.WriteLine($"synchronous read result { nodesToRead(i).NodeId.ToString() } Value => { res.Value.ToString() } StatusCode => { res.StatusCode.ToString()}")
                     Next
 
                     Console.WriteLine()
@@ -112,30 +169,26 @@ Public Class Program
                     'create a WriteValueCollection and fill this with WriteValue objects
                     Dim nodesToWrite As WriteValueCollection = New WriteValueCollection()
                     Dim writeValue As WriteValue = New WriteValue()
-                    writeValue.NodeId = New NodeId("ns=2;i=10219") 'Objects.Data.Static.Scalar.Int16Value
-                    writeValue.Value = New DataValue(CShort(-16))
+                    writeValue.NodeId = temperatureId 'Objects.Plant.Line1.Machine1.Temperature
+                    writeValue.Value = New DataValue(25.5)
                     writeValue.AttributeId = Attributes.Value
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = New NodeId("ns=2;i=10221") 'Objects.Data.Static.Scalar.Int32Value
+                    writeValue.NodeId = rpmId 'Objects.Plant.Line1.Machine1.RPM
                     writeValue.AttributeId = Attributes.Value
-                    writeValue.Value = New DataValue(-3232)
+                    writeValue.Value = New DataValue(1750)
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = New NodeId("ns=2;i=10223") 'Objects.Data.Static.Scalar.Int64Value
+                    writeValue.NodeId = pressureId 'Objects.Plant.Line1.Machine1.Pressure
                     writeValue.AttributeId = Attributes.Value
-                    writeValue.Value = New DataValue(CLng(-64646464))
+                    writeValue.Value = New DataValue(1.05F)
                     nodesToWrite.Add(writeValue)
 
-                    'Write the node values synchronously
+                    'writing the nodes synchronous
                     Dim writeResults As StatusCodeCollection = client.Write(nodesToWrite)
 
                     For i As Integer = 0 To writeResults.Count - 1
-                        If StatusCode.IsGood(writeResults(i)) Then
-                            Console.WriteLine($"synchronous write result { nodesToWrite(i).NodeId.ToString() } Value => { nodesToWrite(i).Value.ToString() } StatusCode => { writeResults(i).ToString()}")
-                        Else
-                            Console.WriteLine($"write failed for { nodesToWrite(i).NodeId.ToString() } StatusCode => { writeResults(i).ToString()}")
-                        End If
+                        Console.WriteLine($"synchronous write result { nodesToWrite(i).NodeId.ToString() } Value => { nodesToWrite(i).Value.ToString() } StatusCode => { writeResults(i).ToString()}")
                     Next
 
                     Console.WriteLine()
@@ -182,6 +235,7 @@ Public Class Program
         End Try
     End Sub
 
+
     Private Sub client_CertificateValidation(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
         ' External certificate validation
         If ServiceResult.IsGood(e.Error) Then
@@ -196,16 +250,16 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 End Class

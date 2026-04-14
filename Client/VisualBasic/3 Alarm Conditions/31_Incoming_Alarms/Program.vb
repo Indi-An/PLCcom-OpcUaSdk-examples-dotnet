@@ -1,3 +1,39 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 31: Incoming Alarms
+'
+' OPC UA Alarms and Conditions notify clients about abnormal states.
+' This workshop subscribes to alarm events and displays them as they
+' arrive from the server.
+'
+' What you will learn:
+'   * How to subscribe to alarm events
+'   * How to receive and display incoming alarms
+'   * How to read alarm properties (severity, message, source)
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
@@ -20,13 +56,30 @@ Public Class Program
     Private Sub Start()
         Try
 
+         Console.WriteLine()
+
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 31: Incoming Alarms     ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  OPC UA Alarms notify clients about abnormal states.         ║")
+             Console.WriteLine("║  This workshop subscribes to alarm events and displays       ║")
+             Console.WriteLine("║  them as they arrive from the server.                        ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Subscribe to alarm events                               ║")
+             Console.WriteLine("║    * Receive and display incoming alarms                     ║")
+             Console.WriteLine("║    * Read alarm properties (severity, message, source)       ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50510/PLCcom/AlarmConditionServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -43,20 +96,20 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'Enable AutoConnect - the client will connect and reconnect automatically
+                    'enable auto connect functionality
                     sessionConfiguration.AutoConnect = True
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+                    'Create a new opc client instance and pass your license information
                     client = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                     Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
 
-                    'Register event handlers to monitor the connection state
+                    'register events
                     AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                     AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                     AddHandler client.SessionClosing, AddressOf Client_SessionClosing
@@ -71,6 +124,7 @@ Public Class Program
 
                         If Console.ReadLine().ToLower().Equals("y") Then
                             Console.WriteLine($"Please enter filter level... { Microsoft.VisualBasic.Constants.vbCrLf }List of commands: { Microsoft.VisualBasic.Constants.vbCrLf }1    - All { Microsoft.VisualBasic.Constants.vbCrLf }2    - Dialogs { Microsoft.VisualBasic.Constants.vbCrLf }3    - Alarms { Microsoft.VisualBasic.Constants.vbCrLf }4    - Limit alarms { Microsoft.VisualBasic.Constants.vbCrLf }5    - Discrete alarms{ Microsoft.VisualBasic.Constants.vbCrLf}")
+
 
                             'create eventfilter for monitoring
                             Select Case Console.ReadLine().ToLower()
@@ -102,11 +156,11 @@ Public Class Program
                         subscription.PublishingEnabled = False
                         subscription.DisplayName = "mySubsription"
 
-                        'Register subscription state change events
+                        'register subscription events
                         AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
                         subscription.PublishingEnabled = False
 
-                        'Add the subscription to the client instance
+                        'add subscription to client
                         client.AddSubscription(subscription)
                         Dim reference As ReferenceDescription = client.GetReferenceDescriptionByNodeId(ObjectIds.Server)
 
@@ -125,6 +179,7 @@ Public Class Program
                         monitoredItem.QueueSize = UInteger.MaxValue
                         monitoredItem.DiscardOldest = True
 
+
                         'checking and creating event filter cache
                         If Not mEventFilterMappings.ContainsKey(filter) Then
                             Dim d As Dictionary(Of Integer, String) = New Dictionary(Of Integer, String)()
@@ -137,16 +192,17 @@ Public Class Program
                             mEventFilterMappings.Add(filter, d)
                         End If
 
-                        'Register the notification callback for value changes
+
+                        'register monitoring event
                         AddHandler monitoredItem.Notification, AddressOf Client_MonitorNotification
 
-                        'Add the monitored item to the subscription
+                        'add item to subscription
                         subscription.AddItem(monitoredItem)
 
-                        'Apply all pending changes to the subscription
+                        'apply changes
                         subscription.ApplyChanges()
 
-                        'Enable publishing mode and apply the configured PublishingInterval
+                        'enable publishing mode of subscription and set PublishingInterval
                         subscription.SetPublishingMode(True)
                         subscription.Modify()
                         client.Refresh_Conditions(subscription)
@@ -170,7 +226,7 @@ Public Class Program
         Finally
             Console.WriteLine("press enter for exit")
             Console.ReadLine()
-            'Disconnect the current session
+            'disconnect actual session
             If client IsNot Nothing AndAlso client.GetSessionState().Equals(SessionState.Connected) Then client.Disconnect()
         End Try
     End Sub
@@ -189,17 +245,17 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)
@@ -222,6 +278,7 @@ Public Class Program
             ' ignore for refresh start or end.
             If eventTypeId Is ObjectTypeIds.RefreshStartEventType OrElse eventTypeId Is ObjectTypeIds.RefreshEndEventType Then Return
 
+
             'show actual event alarm data in debug window
             Dim sb As StringBuilder = New StringBuilder()
             sb.Append("new notification received:")
@@ -241,6 +298,7 @@ Public Class Program
             Console.WriteLine(exception.Message)
         End Try
     End Sub
+
 
     ''' <summary>
     ''' Finds the type of the event for the notification.
@@ -264,6 +322,7 @@ Public Class Program
 
         Return Nothing
     End Function
+
 
     ''' <summary>
     ''' returns cached eventfilter

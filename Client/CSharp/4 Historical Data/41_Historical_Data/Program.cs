@@ -1,356 +1,307 @@
+// MIT License
+// Copyright (c) Indi.An GmbH
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 41: Historical Data
+//
+// OPC UA Historical Access lets you read past values of a variable.
+// The server stores timestamped values and returns them on request.
+// This is essential for trend analysis and reporting.
+//
+// What you will learn:
+//   * How to read historical values for a time range
+//   * How to handle continuation points for large result sets
+//   * How to interpret historical DataValues with timestamps
+//
+// Target server: opc.tcp://localhost:48410
+// ==============================================================================
+
+// ==============================================================================
+// PLCcom OPC UA Client SDK - Workshop 41: Historical Data
+//
+// OPC UA Historical Access (Part 11) lets clients read past values of variables
+// using the HistoryRead service. The server must have history enabled on the
+// variable (Historizing = true) - see Server Workshop 31.
+//
+// This workshop demonstrates all HistoryRead and HistoryUpdate operations:
+//   ReadRaw      - read recorded values as-is
+//   ReadModified - read values that were changed after recording
+//   ReadAtTime   - read values at specific evenly-spaced timestamps
+//   ReadProcessed- read aggregated values (Average, Min, Max, ...)
+//   Insert       - add a new value into the history
+//   Update       - insert or replace a value
+//   Replace      - replace an existing value
+//   Remove       - remove a value by timestamp
+//   DeleteRaw    - delete all values in a time range
+//   DeleteModified - delete modified values in a time range
+//   DeleteAtTime - delete values at specific timestamps
+//
+// Requires Server Workshop 31 running on: opc.tcp://localhost:48410
+// ==============================================================================
+
 using PLCcom.Opc.Ua.Client.Sdk;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Client;
 
-class Program
+//TODO
+//Submit your license information from your license e-mail
+string LicenseUserName = "<Enter your UserName here>";
+string LicenseSerial   = "<Enter your Serial here>";
+
+Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 41: Historical Data     ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  OPC UA Historical Access lets you read past values.         ║");
+Console.WriteLine("║  The server stores timestamped values and returns them       ║");
+Console.WriteLine("║  on request - essential for trend analysis.                  ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  What you will learn:                                        ║");
+Console.WriteLine("║    * Read historical values for a time range                 ║");
+Console.WriteLine("║    * Handle continuation points for large result sets        ║");
+Console.WriteLine("║    * Interpret historical DataValues with timestamps         ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Requires Server Workshop 31 running on port 48430           ║");
+Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+Console.WriteLine();
+
+// -- Connect -------------------------------------------------------------------
+var endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
+
+if (endpoints.Count == 0)
 {
-    //define the ua client
-    UaClient client = null;
+    Console.WriteLine("No endpoints found. Is Server Workshop 31 running?");
+    Console.ReadLine();
+    return;
+}
 
-    static void Main(string[] args)
+Console.WriteLine("Endpoints found:");
+for (int i = 0; i < endpoints.Count; i++)
+    Console.WriteLine($"  {i} => {UaClient.EndpointToString(endpoints[i])}");
+
+Console.Write("Select endpoint index: ");
+if (!int.TryParse(Console.ReadLine(), out int idx) || idx < 0 || idx >= endpoints.Count)
+{
+    Console.WriteLine("Invalid selection."); Console.ReadLine(); return;
+}
+
+var sessionConfig = SessionConfiguration.Build(
+    System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
+    endpoints[idx]);
+sessionConfig.AutoConnect = true;
+
+using var client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
+client.CertificateValidation += (s, e) => e.Accept = true;
+client.ServerConnected       += (s, e) => Console.WriteLine($"{DateTime.Now:T} Connected");
+client.ServerConnectionLost  += (s, e) => Console.WriteLine($"{DateTime.Now:T} Connection lost");
+
+// Connect by reading a value - AutoConnect triggers the session
+Console.Write("Connecting ... ");
+client.Connect();
+Console.WriteLine("OK");
+Console.WriteLine();
+
+// -- Resolve NodeId by browse path ---------------------------------------------
+// Instead of hardcoding a numeric NodeId, we resolve it by path.
+// This is more robust - the NodeId may change, the browse path won't.
+NodeId nodeId = client.GetNodeIdByPath("Objects.Plant.Sensor.Temperature");
+Console.WriteLine($"Temperature NodeId: {nodeId}");
+Console.WriteLine();
+
+// -- Command loop --------------------------------------------------------------
+while (true)
+{
+    Console.WriteLine("Select operation:");
+    foreach (int v in Enum.GetValues(typeof(HistoryReadOperation)))
+        Console.WriteLine($"  {v} - {Enum.GetName(typeof(HistoryReadOperation), v)}");
+    Console.Write("> ");
+
+    string input = Console.ReadLine();
+    if (string.IsNullOrEmpty(input)) break;
+
+    try
     {
-        Program program = new Program();
-        program.Start();
-    }
-    void Start()
-    {
-        try
+        HistoryData values = null;
+
+        switch (input)
         {
+            case "1": // Subscribe - monitor live values via subscription
+                var subscription = new Subscription { PublishingInterval = 1000 };
+                subscription.StateChanged += (sub, e) =>
+                    Console.WriteLine($"Subscription state: {e.Status}");
+                client.AddSubscription(subscription);
 
-            //Submit your license information from your license e-mail
-            string LicenseUserName = "<Enter your UserName here>";
-            string LicenseSerial = "<Enter your Serial here>";
-
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:50530/PLCcom/HistoricalAccessServer"), 60000);
-
-            // Sort endpoints by security level (highest security first)
-            Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
-
-            if (Endpoints.Count > 0)
-            {
-                Console.WriteLine("endpoints found:");
-                int counter = 0;
-                foreach (EndpointDescription Endpoint in Endpoints)
+                var item = new MonitoredItem((ITelemetryContext)null)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
-                }
-
-                Console.WriteLine("please enter index of desired endpoint");
-                string NumberOfEndpoint = Console.ReadLine();
-                Console.WriteLine("");
-
-                int iNumberOfEndpoint = -1;
-                if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
+                    StartNodeId      = nodeId,
+                    AttributeId      = Attributes.Value,
+                    MonitoringMode   = MonitoringMode.Reporting,
+                    SamplingInterval = 500,
+                    QueueSize        = uint.MaxValue,
+                    DiscardOldest    = true,
+                    DisplayName      = "Temperature"
+                };
+                item.Notification += (mi, e) =>
                 {
-                    // Create a SessionConfiguration with the selected endpoint and application name
-                    SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                                                                                          Endpoints[iNumberOfEndpoint]);
-
-                    // Enable AutoConnect - the client will connect and reconnect automatically
-                    sessionConfiguration.AutoConnect = true;
-
-                    // Display the certificate store path for debugging purposes
-                    Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
-
-                    // Create a new OPC UA client instance with license credentials
-                    client = new UaClient(LicenseUserName, LicenseSerial, sessionConfiguration);
-                    Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
-
-                    // Register event handlers to monitor the connection state
-                    client.ServerConnectionLost += Client_ServerConnectionLost;
-                    client.ServerConnected += Client_ServerConnected;
-                    client.SessionClosing += Client_SessionClosing;
-                    client.KeepAlive += Client_KeepAlive;
-                    client.CertificateValidation += client_CertificateValidation;
-
-                    Console.WriteLine(client.GetSessionState().ToString());
-                    Console.WriteLine();
-
-                    //Create and add a subscription
-                    Subscription subscription = new Subscription();
-                    subscription.PublishingInterval = 1000;
-                    subscription.PublishingEnabled = false;
-                    subscription.DisplayName = "mySubsription";
-
-                    // Register subscription state change events
-                    subscription.StateChanged += Subscription_StateChanged;
-                    subscription.PublishingEnabled = true;
-
-                    // Add the subscription to the client instance
-                    client.AddSubscription(subscription);
-
-                    do
-                    {
-                        StringBuilder commandList = new StringBuilder();
-                        commandList.Append("Please Enter a Command....");
-                        commandList.Append(Environment.NewLine);
-                        Array enumValueArray = Enum.GetValues(typeof(HistoryReadOperation));
-                        foreach (int enumValue in enumValueArray)
-                        {
-                            commandList.Append(enumValue.ToString() + " - " + Enum.GetName(typeof(HistoryReadOperation), enumValue));
-                            commandList.Append(Environment.NewLine);
-                        }
-
-                        Console.WriteLine(commandList);
-
-                        string mode = Console.ReadLine();
-                        if (string.IsNullOrEmpty(mode)) break;
-
-                        //set target NodeId
-                        NodeId nodeId = new NodeId("ns=2;s=1:PLCcom.HistoricalAccessServer.Data.Dynamic.Int64.txt");
-
-                        if (nodeId != null)
-                        {
-                            try
-                            {
-                                HistoryData values = null;
-                                switch (mode)
-                                {
-                                    case "1":// - Subscribe
-                                        MonitoredItem monitoredItem = new MonitoredItem((ITelemetryContext)null);
-                                        monitoredItem.StartNodeId = nodeId;
-                                        monitoredItem.AttributeId = Attributes.Value;
-                                        monitoredItem.MonitoringMode = MonitoringMode.Reporting;
-                                        monitoredItem.SamplingInterval = 500;
-                                        monitoredItem.QueueSize = UInt32.MaxValue;
-                                        monitoredItem.DiscardOldest = true;
-                                        monitoredItem.DisplayName = monitoredItem.StartNodeId.ToString();
-
-                                        // Register the notification callback for value changes
-                                        monitoredItem.Notification += Client_MonitorNotification;
-
-                                        // Add the monitored item to the subscription
-                                        subscription.AddItem(monitoredItem);
-
-                                        // Apply all pending changes to the subscription (creates monitored items on the server)
-                                        subscription.ApplyChanges();
-                                        Console.ReadLine();
-                                        break;
-                                    case "2":// - Raw
-                                        values = client.ReadRaw(nodeId,
-                                                                DateTime.Now.AddDays(-1),
-                                                                DateTime.Now,
-                                                                false);
-                                        foreach (DataValue value in values.DataValues)
-                                        {
-                                            Console.WriteLine(value.SourceTimestamp.ToLocalTime() + " Value => " + value.Value + " StatusCode => " + value.StatusCode);
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "3":// - Modified
-                                        values = client.ReadRaw(nodeId,
-                                                                DateTime.Now.AddDays(-1),
-                                                                DateTime.Now,
-                                                                true);
-                                        foreach (DataValue value in values.DataValues)
-                                        {
-                                            Console.WriteLine(value.SourceTimestamp.ToLocalTime() + " Value => " + value.Value + " StatusCode => " + value.StatusCode);
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "4":// - AtTime
-                                        values = client.ReadAtTime(nodeId,
-                                                                    DateTime.Now.AddHours(-2),
-                                                                    10,
-                                                                    10000,
-                                                                    false);
-                                        foreach (DataValue value in values.DataValues)
-                                        {
-                                            Console.WriteLine(value.SourceTimestamp.ToLocalTime() + " Value => " + value.Value + " StatusCode => " + value.StatusCode);
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "5":// - Processed
-                                        values = client.ReadProcessed(nodeId,
-                                                                    client.GetAvailableAggregates()["Interpolative"],
-                                                                    DateTime.Now.AddHours(-4),
-                                                                    DateTime.Now.AddHours(-2),
-                                                                    5000);
-                                        foreach (DataValue value in values.DataValues)
-                                        {
-                                            Console.WriteLine(value.SourceTimestamp.ToLocalTime() + " Value => " + value.Value + " StatusCode => " + value.StatusCode);
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "6":// - Insert
-                                        List<DataValue> HistoryValues = new List<DataValue>();
-                                        DataValue historyData = new DataValue();
-                                        historyData.SourceTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.ServerTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.StatusCode = new StatusCode(StatusCodes.GoodEntryInserted);
-                                        Console.WriteLine("Please enter a value...");
-                                        historyData.Value = Console.ReadLine();
-                                        HistoryValues.Add(historyData);
-                                        HistoryUpdateResultCollection UpdateResult = client.Insert(nodeId, HistoryValues);
-                                        Console.WriteLine("StatusCode => " + UpdateResult[0].OperationResults[0].ToString());
-                                        Console.WriteLine();
-                                        break;
-                                    case "7":// - Update
-                                        HistoryValues = new List<DataValue>();
-                                        historyData = new DataValue();
-                                        historyData.SourceTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.ServerTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.StatusCode = new StatusCode(StatusCodes.GoodEntryInserted);
-                                        Console.WriteLine("Please enter a value...");
-                                        historyData.Value = Console.ReadLine();
-                                        HistoryValues.Add(historyData);
-                                        UpdateResult = client.Update(nodeId, HistoryValues);
-                                        Console.WriteLine("StatusCode => " + UpdateResult[0].OperationResults[0].ToString());
-                                        Console.WriteLine();
-                                        break;
-                                    case "8":// - Replace
-                                        HistoryValues = new List<DataValue>();
-                                        historyData = new DataValue();
-                                        historyData.SourceTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.ServerTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.StatusCode = new StatusCode(StatusCodes.GoodEntryInserted);
-                                        Console.WriteLine("Please enter a value...");
-                                        historyData.Value = Console.ReadLine();
-                                        HistoryValues.Add(historyData);
-                                        UpdateResult = client.Replace(nodeId, HistoryValues);
-                                        Console.WriteLine("StatusCode => " + UpdateResult[0].OperationResults[0].ToString());
-                                        Console.WriteLine();
-                                        break;
-                                    case "9":// - Remove
-                                        HistoryValues = new List<DataValue>();
-                                        historyData = new DataValue();
-                                        historyData.SourceTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.ServerTimestamp = DateTime.Now.ToUniversalTime();
-                                        historyData.StatusCode = new StatusCode(StatusCodes.GoodEntryInserted);
-                                        Console.WriteLine("Please enter a value...");
-                                        historyData.Value = Console.ReadLine();
-                                        HistoryValues.Add(historyData);
-                                        UpdateResult = client.Remove(nodeId, HistoryValues);
-                                        Console.WriteLine("StatusCode => " + UpdateResult[0].OperationResults[0].ToString());
-                                        Console.WriteLine();
-                                        break;
-                                    case "10":// - DeleteRaw
-                                        HistoryUpdateResultCollection results = client.DeleteRaw(nodeId,
-                                                                                DateTime.Now.AddHours(-4),
-                                                                                DateTime.Now.AddHours(-2),
-                                                                                false);
-                                        foreach (HistoryUpdateResult value in results)
-                                        {
-                                            Console.WriteLine("StatusCode => " + value.StatusCode.ToString());
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "11":// - DeleteModified
-                                        results = client.DeleteRaw(nodeId,
-                                                                               DateTime.Now.AddHours(-4),
-                                                                               DateTime.Now.AddHours(-2),
-                                                                               true);
-                                        foreach (HistoryUpdateResult value in results)
-                                        {
-                                            Console.WriteLine("StatusCode => " + value.StatusCode.ToString());
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-                                    case "12":// - DeleteAtTime
-                                        results = client.DeleteAtTime(nodeId,
-                                                                        DateTime.Now.AddHours(-4),
-                                                                        10,
-                                                                        5000);
-                                        foreach (HistoryUpdateResult value in results)
-                                        {
-                                            Console.WriteLine("StatusCode => " + value.StatusCode.ToString());
-                                        }
-                                        Console.WriteLine(string.Empty);
-                                        break;
-
-                                    case "13"://Exit
-                                        return;
-                                }
-
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine(ex);
-                                Console.WriteLine();
-                            }
-                        }
-                    }
-                    while (true);
-                }
-                else
-                {
-                    Console.WriteLine("invalid number of Endpoint");
-                    Console.WriteLine();
-                    Console.WriteLine("press enter for exit");
-                    Console.ReadLine();
-                }
-            }
-            else
-            {
-                Console.WriteLine("no endpoints found");
-                Console.WriteLine();
-                Console.WriteLine("press enter for exit");
+                    var n = e.NotificationValue as MonitoredItemNotification;
+                    Console.WriteLine($"  {n.Value.SourceTimestamp:T}  T={n.Value.Value}  {n.Value.StatusCode}");
+                };
+                subscription.AddItem(item);
+                subscription.ApplyChanges();
+                Console.WriteLine("Monitoring... press ENTER to stop.");
                 Console.ReadLine();
+                break;
+
+            case "2": // ReadRaw - all recorded values as stored
+                values = client.ReadRaw(nodeId, DateTime.Now.AddMinutes(-10), DateTime.Now, false);
+                PrintValues(values);
+                break;
+
+            case "3": // ReadModified - only values that were changed after recording
+                values = client.ReadRaw(nodeId, DateTime.Now.AddMinutes(-10), DateTime.Now, true);
+                PrintValues(values);
+                break;
+
+            case "4": // ReadAtTime - values at 10 evenly-spaced timestamps, 30s apart
+                values = client.ReadAtTime(nodeId, DateTime.Now.AddMinutes(-5), 10, 30000, false);
+                PrintValues(values);
+                break;
+
+            case "5": // ReadProcessed - server computes aggregate (e.g. Average) per interval
+                // GetAvailableAggregates() queries the server for supported aggregate functions
+                var aggregates = client.GetAvailableAggregates();
+                Console.WriteLine("Available aggregates: " + string.Join(", ", aggregates.Keys));
+                values = client.ReadProcessed(nodeId,
+                    aggregates.ContainsKey("Average") ? aggregates["Average"] : aggregates["Interpolative"],
+                    DateTime.Now.AddMinutes(-5),
+                    DateTime.Now,
+                    60000); // one aggregate value per 60 seconds
+                PrintValues(values);
+                break;
+
+            case "6": // Insert - add a new value at current timestamp
+            {
+                Console.Write("Value to insert: ");
+                var dv = new DataValue
+                {
+                    SourceTimestamp = DateTime.UtcNow,
+                    ServerTimestamp = DateTime.UtcNow,
+                    StatusCode      = new StatusCode(StatusCodes.GoodEntryInserted),
+                    Value           = Console.ReadLine()
+                };
+                var result = client.Insert(nodeId, new List<DataValue> { dv });
+                Console.WriteLine("Result: " + result[0].OperationResults[0]);
+                break;
             }
+
+            case "7": // Update - insert if not exists, replace if exists
+            {
+                Console.Write("Value to update: ");
+                var dv = new DataValue
+                {
+                    SourceTimestamp = DateTime.UtcNow,
+                    ServerTimestamp = DateTime.UtcNow,
+                    StatusCode      = new StatusCode(StatusCodes.GoodEntryInserted),
+                    Value           = Console.ReadLine()
+                };
+                var result = client.Update(nodeId, new List<DataValue> { dv });
+                Console.WriteLine("Result: " + result[0].OperationResults[0]);
+                break;
+            }
+
+            case "8": // Replace - replace existing value at timestamp (fails if not exists)
+            {
+                Console.Write("Value to replace: ");
+                var dv = new DataValue
+                {
+                    SourceTimestamp = DateTime.UtcNow,
+                    ServerTimestamp = DateTime.UtcNow,
+                    StatusCode      = new StatusCode(StatusCodes.GoodEntryInserted),
+                    Value           = Console.ReadLine()
+                };
+                var result = client.Replace(nodeId, new List<DataValue> { dv });
+                Console.WriteLine("Result: " + result[0].OperationResults[0]);
+                break;
+            }
+
+            case "9": // Remove - remove value at current timestamp
+            {
+                Console.Write("Value (timestamp marker): ");
+                var dv = new DataValue
+                {
+                    SourceTimestamp = DateTime.UtcNow,
+                    ServerTimestamp = DateTime.UtcNow,
+                    Value           = Console.ReadLine()
+                };
+                var result = client.Remove(nodeId, new List<DataValue> { dv });
+                Console.WriteLine("Result: " + result[0].OperationResults[0]);
+                break;
+            }
+
+            case "10": // DeleteRaw - delete all values in a time range
+            {
+                var result = client.DeleteRaw(nodeId, DateTime.Now.AddMinutes(-2), DateTime.Now, false);
+                foreach (var r in result) Console.WriteLine("Result: " + r.StatusCode);
+                break;
+            }
+
+            case "11": // DeleteModified - delete modified values in a time range
+            {
+                var result = client.DeleteRaw(nodeId, DateTime.Now.AddMinutes(-2), DateTime.Now, true);
+                foreach (var r in result) Console.WriteLine("Result: " + r.StatusCode);
+                break;
+            }
+
+            case "12": // DeleteAtTime - delete values at 5 specific timestamps, 30s apart
+            {
+                var result = client.DeleteAtTime(nodeId, DateTime.Now.AddMinutes(-2), 5, 30000);
+                foreach (var r in result) Console.WriteLine("Result: " + r.StatusCode);
+                break;
+            }
+
+            case "13": // Exit
+                goto done;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
-            Console.WriteLine("press enter for exit");
-            Console.ReadLine();
-        }
-        finally
-        {
-            // Disconnect the current session
-            if (client != null && client.GetSessionState().Equals(SessionState.Connected)) client.Disconnect();
-        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Error: " + ex.Message);
     }
 
-    private void Client_MonitorNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
-    {
-        MonitoredItemNotification notification = e.NotificationValue as MonitoredItemNotification;
-        Console.WriteLine(monitoredItem.StartNodeId.ToString() + " Value " + notification.Value + " Status: " + notification.Value.StatusCode.ToString());
-    }
+    Console.WriteLine();
+}
 
-    void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
-    {
-        // Handle server certificate validation
-        if (ServiceResult.IsGood(e.Error))
-            e.Accept = true;
-        else if (!e.ContainsUnsuppressibleStatusCodes)
-            e.Accept = true;
-        else if (e.ContainsUnsuppressibleStatusCodes)
-            e.AcceptAll = true; //you can accept all unsuppressible statuscode with this flag
-        else
-        {
-            throw new Exception(string.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo));
-        }
-    }
-    private void Client_ServerConnected(object sender, EventArgs e)
-    {
-        // Fired when the OPC UA session is successfully established
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
-    }
+done:
+client.Disconnect();
 
-    private void Client_ServerConnectionLost(object sender, EventArgs e)
+static void PrintValues(HistoryData data)
+{
+    if (data?.DataValues == null || data.DataValues.Count == 0)
     {
-        // Fired when the connection to the OPC UA server is lost
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
+        Console.WriteLine("  (no values)");
+        return;
     }
-
-    void Client_KeepAlive(ISession session, KeepAliveEventArgs e)
-    {
-        // Fired periodically to indicate the server is still alive
-    }
-
-    private void Client_SessionClosing(object sender, EventArgs e)
-    {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
-    }
-
-    private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
-    {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
-    }
-
+    foreach (var v in data.DataValues)
+        Console.WriteLine($"  {v.SourceTimestamp.ToLocalTime():T}  Value={v.Value,-10}  {v.StatusCode}");
+    Console.WriteLine($"  => {data.DataValues.Count} values");
 }

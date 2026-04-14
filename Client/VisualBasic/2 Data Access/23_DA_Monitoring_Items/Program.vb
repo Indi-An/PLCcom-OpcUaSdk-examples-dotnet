@@ -1,3 +1,41 @@
+' MIT License
+' Copyright (c) Indi.An GmbH
+'
+' Permission is hereby granted, free of charge, to any person obtaining a copy
+' of this software and associated documentation files (the "Software"), to deal
+' in the Software without restriction, including without limitation the rights
+' to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+' copies of the Software, and to permit persons to whom the Software is
+' furnished to do so, subject to the following conditions:
+'
+' The above copyright notice and this permission notice shall be included in all
+' copies or substantial portions of the Software.
+'
+' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+' SOFTWARE.
+
+' ==============================================================================
+' PLCcom OPC UA Client SDK - Workshop 23: Monitoring Items (Subscriptions)
+'
+' OPC UA subscriptions let you monitor value changes without polling.
+' The server pushes DataChange notifications to the client whenever a
+' monitored value changes. This is the most efficient way to track
+' live process data.
+'
+' What you will learn:
+'   * How to create a Subscription with a publishing interval
+'   * How to add MonitoredItems to a subscription
+'   * How to receive DataChange notifications via events
+'   * How to manage subscription lifecycle (enable, modify, dispose)
+'
+' Target server: opc.tcp://localhost:48410
+' ==============================================================================
+
 Imports System
 Imports System.Reflection
 Imports PLCcom.Opc.Ua
@@ -16,13 +54,31 @@ Public Class Program
 
     Private Sub Start()
         Try
+
+         Console.WriteLine()
+
+             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 23: Monitoring Items    ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  OPC UA subscriptions push DataChange notifications to       ║")
+             Console.WriteLine("║  the client whenever a monitored value changes.              ║")
+             Console.WriteLine("║  No polling needed - the most efficient approach.            ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  What you will learn:                                        ║")
+             Console.WriteLine("║    * Create a Subscription with a publishing interval        ║")
+             Console.WriteLine("║    * Add MonitoredItems to a subscription                    ║")
+             Console.WriteLine("║    * Receive DataChange notifications via events             ║")
+             Console.WriteLine("║    * Manage subscription lifecycle                           ║")
+             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine()
+
+            'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:50520/PLCcom/DataAccessServer"), 60000)
-
-            'Sort endpoints by security level (highest security first)
+            'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
 
             If Endpoints.Count > 0 Then
@@ -39,43 +95,45 @@ Public Class Program
                 Dim iNumberOfEndpoint As Integer = -1
 
                 If Integer.TryParse(NumberOfEndpoint, iNumberOfEndpoint) AndAlso iNumberOfEndpoint > -1 AndAlso iNumberOfEndpoint < Endpoints.Count Then
-                    'Create a SessionConfiguration with the selected endpoint and application name
+                    'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'Enable AutoConnect - the client will connect and reconnect automatically
+                    'enable auto connect functionality
                     sessionConfiguration.AutoConnect = True
 
-                    'Display the certificate store path for debugging purposes
+                    'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-                    'Create a new OPC UA client instance with license credentials
+
+                    'Create a new opc client instance and pass your license information
                     Using client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                         Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
                         Console.WriteLine("")
 
-                        'Register event handlers to monitor the connection state
+                        'register events
                         AddHandler client.ServerConnectionLost, AddressOf Client_ServerConnectionLost
                         AddHandler client.ServerConnected, AddressOf Client_ServerConnected
                         AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                         AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                         AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
 
-                        'Create a new subscription for monitoring data changes
+
+                        'create a new subscription
                         Using subscription As Subscription = New Subscription()
                             subscription.PublishingInterval = 1000
                             subscription.PublishingEnabled = False
                             subscription.DisplayName = "mySubsription"
 
-                            'Register subscription state change events
+                            'register subscription events
                             AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
                             AddHandler subscription.PublishStatusChanged, AddressOf Subscription_PublishStatusChanged
 
-                            'Add the subscription to the client instance
+                            'add new subscription to client
                             client.AddSubscription(subscription)
 
                             Try
                                 'Create a monitoring item and add to the subscription
-                                Dim nodeId As NodeId = client.GetNodeIdByPath("Objects.Data.Dynamic.Scalar.Int64Value")
+                                Dim nodeId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature")
                                 Dim monitoredItem As MonitoredItem = New MonitoredItem(subscription.DefaultItem) With {
                                     .StartNodeId = nodeId,
                                     .SamplingInterval = 500,
@@ -83,11 +141,11 @@ Public Class Program
                                     .DisplayName = nodeId.ToString()
                                 }
 
-                                'Register the notification callback for value changes
+                                'register monitoring event
                                 AddHandler monitoredItem.Notification, AddressOf Client_MonitorNotification
-                                'Add the monitored item to the subscription
+                                'add Item to subscription
                                 subscription.AddItem(monitoredItem)
-                                nodeId = client.GetNodeIdByPath("Objects.Data.Dynamic.Scalar.BooleanValue")
+                                nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.IsRunning")
                                 monitoredItem = New MonitoredItem(subscription.DefaultItem) With {
                                     .StartNodeId = nodeId,
                                     .SamplingInterval = 500,
@@ -95,15 +153,15 @@ Public Class Program
                                     .DisplayName = nodeId.ToString()
                                 }
 
-                                'Register the notification callback for value changes
+                                'register monitoring event
                                 AddHandler monitoredItem.Notification, AddressOf Client_MonitorNotification
-                                'Add the monitored item to the subscription
+                                'add Item to subscription
                                 subscription.AddItem(monitoredItem)
 
-                                'Apply all pending changes to the subscription
+                                'apply changes
                                 subscription.ApplyChanges()
 
-                                'Enable publishing mode and apply the configured PublishingInterval
+                                'enable publishing mode of subscription and set PublishingInterval
                                 subscription.SetPublishingMode(True)
                                 subscription.Modify()
                             Catch ex As Exception
@@ -171,17 +229,17 @@ Public Class Program
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the OPC UA session is successfully established
+        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'Fired when the connection to the OPC UA server is lost
+        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'Fired periodically to indicate the server is still alive
+        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)

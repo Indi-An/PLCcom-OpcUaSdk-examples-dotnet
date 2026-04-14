@@ -1,17 +1,11 @@
-# 3 Alarm Conditions – Examples
+# 3 Alarm Conditions — Client (C#)
 
-This folder contains examples for receiving and managing OPC UA alarms and conditions.
-Each subfolder is a standalone sample project.
+These workshops demonstrate the OPC UA Alarm & Conditions model.
 
----
+| # | Workshop | What you will learn |
+|---|----------|-------------------|
+| 31 | Incoming Alarms | Subscribe to and display incoming alarm events |
+| 32 | Alarm List | Maintain a live list of all active alarms |
+| 33 | Alarm Conditions | Acknowledge, confirm and comment on alarms |
 
-## Examples
-
-### 31_Incoming_Alarms
-Receive incoming alarm notifications from the server.
-
-### 32_Alarm_List
-Maintain a live alarm list with acknowledge/confirm support.
-
-### 33_Alarm_Conditions
-Work with OPC UA Alarm & Condition model including shelving and filtering.
+**Target server:** `opc.tcp://localhost:48410` (Server Workshop 22 — Alarm Conditions)
