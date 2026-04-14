@@ -4,19 +4,19 @@
 
 This repository provides quick-start examples for developers using the **PLCcom.Opc.Ua.Sdk** library. These examples demonstrate how easy it is to integrate PLCcom into your .NET applications, enabling seamless communication with OPC UA servers — and how to build your own OPC UA servers.
 
-## Why PLCcom? — Address OPC UA Nodes by Path
+## Easy to Use — Address Nodes by Path or NodeId
 
-Most OPC UA SDKs require you to work with cryptic NodeIds like `ns=2;s=MyNode` or `ns=2;i=12345`. **PLCcom lets you address nodes by their browse path** — just like navigating a folder structure:
+PLCcom supports two ways to address OPC UA nodes: the classic approach using NodeIds (`ns=2;i=12345`) and — unique to PLCcom — by browse path (`Objects.Plant.Line1.Machine1.Temperature`), just like navigating a folder structure. The SDK resolves the path to the corresponding NodeId in the background:
 
 ```csharp
-// Read a value by path — no NodeId needed!
-DataValue value = client.ReadValueByPath("Objects.Plant.Line1.Machine1.Temperature");
+// Resolve a node by path — no cryptic NodeId needed!
+NodeId nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature");
 
-// Write a value by path
-client.WriteValueByPath("Objects.Plant.Line1.Machine1.RPM", 1500);
+// Read a value
+DataValue value = client.ReadValue(nodeId);
 
-// Monitor a value by path
-NodeId nodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure");
+// Write a value
+client.WriteValue(nodeId, 23.5);
 ```
 
 This makes your code **readable, maintainable, and independent of server-specific NodeId assignments**. Of course, classic NodeId-based access is fully supported too.
