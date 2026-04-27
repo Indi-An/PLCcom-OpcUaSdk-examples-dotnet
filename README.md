@@ -144,7 +144,7 @@ Many client workshops are designed to work with a specific server workshop. Star
 - .NET 10.0
 - Visual Studio 2022 or newer (recommended VS2026)
 
-## Important Licensing Information
+## Licensing Information
 
 **Examples License:**
 - All examples provided in this repository are released under the **MIT License**. You are free to use, modify, and distribute these examples according to the terms of the MIT license.
