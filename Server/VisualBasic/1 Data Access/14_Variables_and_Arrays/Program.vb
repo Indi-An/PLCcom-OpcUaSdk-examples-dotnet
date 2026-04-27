@@ -57,25 +57,9 @@ Module Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 14 - Variables and Arrays",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:14",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .ManufacturerName = "My Company GmbH",
-            .ProductName = "My OPC UA Server",
-            .SoftwareVersion = "1.0.0",
-            .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/variables-and-arrays",
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
@@ -103,23 +87,23 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part A: Scalar data types ------------------------------------")
 
-            Dim scalars = server.CreateFolder("Scalars")
+            Dim scalars = server.CreateFolder("Scalars", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
-            Dim vBool = server.CreateVariable(Of Boolean)(scalars, "MyBool", True)
-            Dim vByte = server.CreateVariable(Of Byte)(scalars, "MyByte", CByte(42))
-            Dim vSByte = server.CreateVariable(Of SByte)(scalars, "MySByte", CSByte(-7))
-            Dim vInt16 = server.CreateVariable(Of Short)(scalars, "MyInt16", CShort(-1000))
-            Dim vUInt16 = server.CreateVariable(Of UShort)(scalars, "MyUInt16", CUShort(5000))
-            Dim vInt32 = server.CreateVariable(Of Integer)(scalars, "MyInt32", 100000)
-            Dim vUInt32 = server.CreateVariable(Of UInteger)(scalars, "MyUInt32", CUInt(200000))
-            Dim vInt64 = server.CreateVariable(Of Long)(scalars, "MyInt64", 9876543210L)
-            Dim vUInt64 = server.CreateVariable(Of ULong)(scalars, "MyUInt64", CULng(1234567890))
-            Dim vFloat = server.CreateVariable(Of Single)(scalars, "MyFloat", 3.14F)
-            Dim vDouble = server.CreateVariable(Of Double)(scalars, "MyDouble", 2.71828)
-            Dim vString = server.CreateVariable(Of String)(scalars, "MyString", "Hello OPC UA")
-            Dim vDateTime = server.CreateVariable(Of DateTime)(scalars, "MyDateTime", DateTime.UtcNow)
-            Dim vGuid = server.CreateVariable(Of Guid)(scalars, "MyGuid", Guid.NewGuid())
-            Dim vByteString = server.CreateVariable(Of Byte())(scalars, "MyByteString", New Byte() {&HDE, &HAD, &HBE, &HEF})
+            Dim vBool = server.CreateVariable(Of Boolean)(scalars, "MyBool", UaRolePermissions.WITHOUT_RESTRICTIONS, True)
+            Dim vByte = server.CreateVariable(Of Byte)(scalars, "MyByte", UaRolePermissions.WITHOUT_RESTRICTIONS, CByte(42))
+            Dim vSByte = server.CreateVariable(Of SByte)(scalars, "MySByte", UaRolePermissions.WITHOUT_RESTRICTIONS, CSByte(-7))
+            Dim vInt16 = server.CreateVariable(Of Short)(scalars, "MyInt16", UaRolePermissions.WITHOUT_RESTRICTIONS, CShort(-1000))
+            Dim vUInt16 = server.CreateVariable(Of UShort)(scalars, "MyUInt16", UaRolePermissions.WITHOUT_RESTRICTIONS, CUShort(5000))
+            Dim vInt32 = server.CreateVariable(Of Integer)(scalars, "MyInt32", UaRolePermissions.WITHOUT_RESTRICTIONS, 100000)
+            Dim vUInt32 = server.CreateVariable(Of UInteger)(scalars, "MyUInt32", UaRolePermissions.WITHOUT_RESTRICTIONS, CUInt(200000))
+            Dim vInt64 = server.CreateVariable(Of Long)(scalars, "MyInt64", UaRolePermissions.WITHOUT_RESTRICTIONS, 9876543210L)
+            Dim vUInt64 = server.CreateVariable(Of ULong)(scalars, "MyUInt64", UaRolePermissions.WITHOUT_RESTRICTIONS, CULng(1234567890))
+            Dim vFloat = server.CreateVariable(Of Single)(scalars, "MyFloat", UaRolePermissions.WITHOUT_RESTRICTIONS, 3.14F)
+            Dim vDouble = server.CreateVariable(Of Double)(scalars, "MyDouble", UaRolePermissions.WITHOUT_RESTRICTIONS, 2.71828)
+            Dim vString = server.CreateVariable(Of String)(scalars, "MyString", UaRolePermissions.WITHOUT_RESTRICTIONS, "Hello OPC UA")
+            Dim vDateTime = server.CreateVariable(Of DateTime)(scalars, "MyDateTime", UaRolePermissions.WITHOUT_RESTRICTIONS, DateTime.UtcNow)
+            Dim vGuid = server.CreateVariable(Of Guid)(scalars, "MyGuid", UaRolePermissions.WITHOUT_RESTRICTIONS, Guid.NewGuid())
+            Dim vByteString = server.CreateVariable(Of Byte())(scalars, "MyByteString", UaRolePermissions.WITHOUT_RESTRICTIONS, New Byte() {&HDE, &HAD, &HBE, &HEF})
 
             Console.WriteLine($"  Boolean     {vBool.Path,-40} = {vBool.Value}")
             Console.WriteLine($"  Byte        {vByte.Path,-40} = {vByte.Value}")
@@ -143,17 +127,17 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part B: Properties (EURange, EngineeringUnits) --------------")
 
-            Dim props = server.CreateFolder("Properties")
+            Dim props = server.CreateFolder("Properties", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
-            Dim temperature = server.CreateVariable(Of Double)(props, "Temperature", 22.5)
+            Dim temperature = server.CreateVariable(Of Double)(props, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, 22.5)
             temperature.SetEURange(0, 100)
             temperature.SetEngineeringUnits("degC", "Degrees Celsius")
 
-            Dim pressure = server.CreateVariable(Of Double)(props, "Pressure", 1.013)
+            Dim pressure = server.CreateVariable(Of Double)(props, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, 1.013)
             pressure.SetEURange(0, 10)
             pressure.SetEngineeringUnits("bar", "Bar")
 
-            Dim speed = server.CreateVariable(Of Double)(props, "Speed", 1500.0)
+            Dim speed = server.CreateVariable(Of Double)(props, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, 1500.0)
             speed.SetEURange(0, 3000)
             speed.SetEngineeringUnits("rpm", "Revolutions per minute")
 
@@ -167,14 +151,14 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part C: OnRead / OnWrite callbacks ---------------------------")
 
-            Dim callbacks = server.CreateFolder("Callbacks")
+            Dim callbacks = server.CreateFolder("Callbacks", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
-            Dim computed = server.CreateVariable(Of Double)(callbacks, "Computed", 0.0, readOnly:=True)
+            Dim computed = server.CreateVariable(Of Double)(callbacks, "Computed", UaRolePermissions.WITHOUT_RESTRICTIONS, 0.0, readOnly:=True)
             computed.OnRead = Function(currentValue)
                                   Return Math.Round(temperature.Value * 1.8 + 32.0, 2)
                               End Function
 
-            Dim validated = server.CreateVariable(Of Integer)(callbacks, "Validated", 50)
+            Dim validated = server.CreateVariable(Of Integer)(callbacks, "Validated", UaRolePermissions.WITHOUT_RESTRICTIONS, 50)
             validated.OnWrite = Function(newValue)
                                     If newValue < 0 OrElse newValue > 100 Then
                                         Console.WriteLine($"  !! Rejected write: {newValue} (must be 0..100)")
@@ -183,7 +167,7 @@ Module Program
                                     Return True
                                 End Function
 
-            Dim counter = server.CreateVariable(Of Integer)(callbacks, "Counter", 0, readOnly:=True)
+            Dim counter = server.CreateVariable(Of Integer)(callbacks, "Counter", UaRolePermissions.WITHOUT_RESTRICTIONS, 0, readOnly:=True)
 
             Console.WriteLine($"  {computed.Path,-45} OnRead -> Fahrenheit")
             Console.WriteLine($"  {validated.Path,-45} OnWrite -> reject if not 0..100")
@@ -195,7 +179,7 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part D: Arrays and exposeElements ----------------------------")
 
-            Dim arrays = server.CreateFolder("Arrays")
+            Dim arrays = server.CreateFolder("Arrays", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
             Dim temps = server.CreateArrayVariable(Of Double)(arrays, "Temperatures",
                 initialValue:=New Double() {20.0, 21.5, 22.0, 23.5, 24.0})
@@ -262,6 +246,73 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        cfg.ApplicationName = "PLCcom Workshop 14 - Variables and Arrays"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:14"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/variables-and-arrays"
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay   = 5
+        cfg.VendorName           = "My Company GmbH"
+        cfg.VendorProductName    = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+        cfg.MaxNodesPerRead = 1000 : cfg.MaxNodesPerWrite = 1000 : cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData = 100 : cfg.MaxNodesPerHistoryReadEvents = 100
+        cfg.MaxNodesPerHistoryUpdateData = 100 : cfg.MaxNodesPerHistoryUpdateEvents = 100
+        cfg.MaxNodesPerMethodCall = 200 : cfg.MaxNodesPerRegisterNodes = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement = 1000 : cfg.MaxMonitoredItemsPerCall = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

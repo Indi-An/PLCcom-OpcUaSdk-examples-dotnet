@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -69,6 +69,9 @@ Public Class Program
              Console.WriteLine("║    * Add MonitoredItems to a subscription                    ║")
              Console.WriteLine("║    * Receive DataChange notifications via events             ║")
              Console.WriteLine("║    * Manage subscription lifecycle                           ║")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -76,7 +79,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -86,7 +89,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -196,7 +199,7 @@ Public Class Program
     End Sub
 
     Private Sub Subscription_StateChanged(ByVal subscription As Subscription, ByVal e As SubscriptionStateChangedEventArgs)
-        Console.WriteLine($"{Date.Now.ToLocalTime()} State of Subscription { UaClient.SubscriptionToString(subscription) } changed to => { e.Status.ToString()}")
+        Console.WriteLine($"{Date.Now.ToLocalTime()} State of Subscription { subscription.ToDisplayString() } changed to => { e.Status.ToString()}")
     End Sub
 
     Private Sub Subscription_PublishStatusChanged(ByVal sender As Object, ByVal e As EventArgs)
@@ -210,7 +213,7 @@ Public Class Program
 
         If subscription IsNot Nothing Then
             Dim currentpublishingState As n_PublishingState = If(subscription.PublishingStopped, n_PublishingState.STOPPED, n_PublishingState.RUNNING)
-            If currentpublishingState <> publishingState OrElse currentpublishingState = n_PublishingState.STOPPED Then Console.WriteLine($"{Date.Now.ToLocalTime() } Publishing state of Subscription { UaClient.SubscriptionToString(CType(sender, Subscription)) } => { currentpublishingState.ToString()}")
+            If currentpublishingState <> publishingState OrElse currentpublishingState = n_PublishingState.STOPPED Then Console.WriteLine($"{Date.Now.ToLocalTime() } Publishing state of Subscription { subscription.ToDisplayString() } => { currentpublishingState.ToString()}")
             publishingState = currentpublishingState
         End If
     End Sub

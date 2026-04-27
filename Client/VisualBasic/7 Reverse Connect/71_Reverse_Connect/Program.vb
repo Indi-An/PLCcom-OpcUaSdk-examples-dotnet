@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -78,19 +78,22 @@ Public Class Program
 
             Console.WriteLine()
 
-             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
-             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 71: Reverse Connect     ║")
-             Console.WriteLine("║                                                              ║")
-             Console.WriteLine("║  With Reverse Connect, the server initiates the TCP          ║")
-             Console.WriteLine("║  connection to the client. Useful when the server is         ║")
-             Console.WriteLine("║  behind a firewall and cannot accept connections.            ║")
-             Console.WriteLine("║                                                              ║")
-             Console.WriteLine("║  What you will learn:                                        ║")
-             Console.WriteLine("║    * How Reverse Connect differs from standard mode          ║")
-             Console.WriteLine("║    * Configure the client for Reverse Connect                ║")
-             Console.WriteLine("║    * Wait for the server to connect back                     ║")
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
-             Console.WriteLine()
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+            Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 71: Reverse Connect     ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  With Reverse Connect, the server initiates the TCP          ║")
+            Console.WriteLine("║  connection to the client. Useful when the server is         ║")
+            Console.WriteLine("║  behind a firewall and cannot accept connections.            ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  What you will learn:                                        ║")
+            Console.WriteLine("║    * How Reverse Connect differs from standard mode          ║")
+            Console.WriteLine("║    * Configure the client for Reverse Connect                ║")
+            Console.WriteLine("║    * Wait for the server to connect back                     ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 71 (Reverse Connect)       ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+            Console.WriteLine()
 
             ' TODO: Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
@@ -153,7 +156,7 @@ Public Class Program
 
                 Using subscription As Subscription = New Subscription()
                     subscription.PublishingInterval = 1000
-                    subscription.PublishingEnabled = False
+                    subscription.PublishingEnabled = True
                     subscription.DisplayName = "ReverseConnectSubscription"
 
                     AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
@@ -171,8 +174,6 @@ Public Class Program
                     AddHandler monitoredItem.Notification, AddressOf Client_MonitorNotification
                     subscription.AddItem(monitoredItem)
                     subscription.ApplyChanges()
-                    subscription.SetPublishingMode(True)
-                    subscription.Modify()
 
                     Console.WriteLine("Monitoring Temperature - press ENTER to exit.")
                     Console.ReadLine()
@@ -211,7 +212,7 @@ Public Class Program
         Dim subscription As Subscription = TryCast(sender, Subscription)
         If subscription IsNot Nothing AndAlso subscription.PublishingStopped Then
             Console.WriteLine(Date.Now.ToLocalTime() & " Publishing STOPPED for: " _
-                & UaClient.SubscriptionToString(subscription))
+                & subscription.ToDisplayString())
         End If
     End Sub
 

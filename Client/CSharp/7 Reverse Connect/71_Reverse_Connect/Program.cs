@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -89,6 +89,9 @@ class Program
              Console.WriteLine("║    * How Reverse Connect differs from standard mode          ║");
              Console.WriteLine("║    * Configure the client for Reverse Connect                ║");
              Console.WriteLine("║    * Wait for the server to connect back                     ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 71 (Reverse Connect)       ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -156,7 +159,7 @@ class Program
                 using (Subscription subscription = new Subscription())
                 {
                     subscription.PublishingInterval = 1000;
-                    subscription.PublishingEnabled  = false;
+                    subscription.PublishingEnabled  = true;
                     subscription.DisplayName        = "ReverseConnectSubscription";
 
                     subscription.StateChanged       += Subscription_StateChanged;
@@ -175,8 +178,6 @@ class Program
                     monitoredItem.Notification += Client_MonitorNotification;
                     subscription.AddItem(monitoredItem);
                     subscription.ApplyChanges();
-                    subscription.SetPublishingMode(true);
-                    subscription.Modify();
 
                     Console.WriteLine("Monitoring Temperature - press ENTER to exit.");
                     Console.ReadLine();
@@ -222,7 +223,7 @@ class Program
         Subscription subscription = sender as Subscription;
         if (subscription != null && subscription.PublishingStopped)
             Console.WriteLine(DateTime.Now.ToLocalTime() + " Publishing STOPPED for: "
-                + UaClient.SubscriptionToString(subscription));
+                + subscription.ToDisplayString());
     }
 
     private void Client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)

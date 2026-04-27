@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -66,6 +66,9 @@ class Program
              Console.WriteLine("║    * Read all attributes (NodeClass through AccessLevelEx)   ║");
              Console.WriteLine("║    * Interpret attribute values and data types               ║");
              Console.WriteLine("║    * Handle BadAttributeIdInvalid for unsupported attrs      ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -74,7 +77,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -85,7 +88,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");

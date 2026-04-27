@@ -22,534 +22,465 @@
 // ==============================================================================
 // PLCcom OPC UA Client SDK - Workshop 51: Complex Data Types
 //
-// OPC UA supports complex structured data types (Structs) that group
-// multiple fields into a single value. This workshop shows how to
-// read and decode structured values from the server.
+// OPC UA supports several levels of data complexity:
+//
+//   Level 1 - Scalar variable        e.g. double, string, bool
+//   Level 2 - Array of scalars       e.g. double[], string[]
+//   Level 3 - Flat struct            fields grouped in one ExtensionObject
+//   Level 4 - Nested struct          struct containing another struct
+//   Level 5 - Struct with arrays     struct fields that are arrays
+//   Level 6 - Array of structs       array of ExtensionObjects
+//
+// Structs are transmitted as ExtensionObjects (binary-encoded blobs).
+// The client must load the server's Type Dictionary first so the SDK
+// can decode the binary payload into named fields.
 //
 // What you will learn:
-//   * How to read complex/structured data types
-//   * How to decode ExtensionObjects with BinaryDecoder
-//   * How to interpret structured field values
+//   * How to load the server Type Dictionary (GetComplexTypeSystem)
+//   * How to read scalar and array variables
+//   * How to read and decode struct variables (ExtensionObject)
+//   * How to write individual struct fields via child node paths
+//   * How to read arrays of structs
 //
-// Target server: opc.tcp://localhost:48410
+// Required server: Server Workshop 15 (Custom Types)
+// opc.tcp://localhost:48410
 // ==============================================================================
 
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using Newtonsoft.Json;
+using System.Linq;
+using System.Text;
 using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Client;
 using PLCcom.Opc.Ua.Client.Sdk;
-using System.Linq;
 using PLCcom.Opc.Ua.Client.ComplexTypes;
 
 class Program
 {
-    UaClient client = null;
-
-    private bool Verbose { get; set; } = true;
-    private bool WriteComplexInt { get; set; } = false;
-
-    private List<INode> allCustomTypeVariables = null;
-
-    private IList<INode> allVariableNodes = null;
-
-    //actual publishing state of subscription
-    private PublishingState publishingState = PublishingState.UNDEFINED;
+    private UaClient client = null;
 
     static void Main(string[] args)
     {
-        Program program = new Program();
-        program.Start();
+        new Program().Start();
     }
 
-    async void Start()
+    void Start()
     {
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 51: Complex Types       ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  OPC UA supports several levels of data complexity:          ║");
+        Console.WriteLine("║    Level 1 - Scalar variable  (double, string, bool)         ║");
+        Console.WriteLine("║    Level 2 - Array of scalars (double[], string[])           ║");
+        Console.WriteLine("║    Level 3 - Flat struct      (fields in ExtensionObject)    ║");
+        Console.WriteLine("║    Level 4 - Nested struct    (struct inside struct)         ║");
+        Console.WriteLine("║    Level 5 - Struct with arrays (array fields in struct)     ║");
+        Console.WriteLine("║    Level 6 - Array of structs (array of ExtensionObjects)    ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Required server: Server Workshop 15 (Custom Types)          ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+
         try
         {
-
-             Console.WriteLine();
-
-             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 51: Complex Types       ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  OPC UA supports complex structured data types (Structs)     ║");
-             Console.WriteLine("║  that group multiple fields into a single value. This        ║");
-             Console.WriteLine("║  workshop shows how to read and decode structured values.    ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  What you will learn:                                        ║");
-             Console.WriteLine("║    * Read complex/structured data types                      ║");
-             Console.WriteLine("║    * Decode ExtensionObjects with BinaryDecoder              ║");
-             Console.WriteLine("║    * Interpret structured field values                       ║");
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
-             Console.WriteLine();
-
             //TODO
             //Submit your license information from your license e-mail
-            //string LicenseUserName = "<Enter your UserName here>";
-            //string LicenseSerial = "<Enter your Serial here>";
             string LicenseUserName = "<Enter your UserName here>";
-            string LicenseSerial = "<Enter your Serial here>";
+            string LicenseSerial   = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            var endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"),
+                certificateValidator: CertificateValidationHandler);
+            endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
 
-            //sort endpoints by security level
-            Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
-
-            if (Endpoints.Count > 0)
+            if (endpoints.Count == 0)
             {
-                Console.WriteLine("endpoints found:");
-                int counter = 0;
-                foreach (EndpointDescription Endpoint in Endpoints)
-                {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
-                }
-
-                Console.WriteLine("please enter index of desired endpoint");
-                string NumberOfEndpoint = Console.ReadLine();
-                Console.WriteLine("");
-
-                int iNumberOfEndpoint = -1;
-                if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
-                {
-                    //create a a SessionConfiguration with the selected endpoint and application name
-                    SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                                                                                         Endpoints[iNumberOfEndpoint]);
-
-                    //disable auto connect functionality
-                    sessionConfiguration.AutoConnect = false;
-
-                    //output certificate store path
-                    Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
-
-                    //Create a new opc client instance and pass your license information
-                    client = new UaClient(LicenseUserName, LicenseSerial, sessionConfiguration);
-
-                    Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
-                    Console.WriteLine("");
-
-                    //register events
-                    client.ServerConnectionLost += Client_ServerConnectionLost;
-                    client.ServerConnected += Client_ServerConnected;
-                    client.SessionClosing += Client_SessionClosing;
-                    client.KeepAlive += Client_KeepAlive;
-                    client.CertificateValidation += client_CertificateValidation;
-
-                    Console.WriteLine("Connect the opc ua client");
-                    client.Connect();
-
-                    try
-                    {
-
-                        Stopwatch stopWatch = new Stopwatch();
-                        Console.WriteLine("Begin browse all nodes");
-                        stopWatch.Start();
-                        allVariableNodes = BrowseAllVariables();
-                        allCustomTypeVariables = allVariableNodes.Where(n => ((VariableNode)n).DataType == DataTypeIds.Structure).ToList();
-                        allCustomTypeVariables.AddRange(allVariableNodes.Where(n => ((VariableNode)n).DataType.NamespaceIndex != 0).ToList());
-                        stopWatch.Stop();
-
-                        Console.WriteLine($" Browse all nodes took {stopWatch.ElapsedMilliseconds}ms.");
-                        Console.WriteLine($" Browsed {allVariableNodes.Count} nodes, from which {allCustomTypeVariables.Count} are custom type variables.");
-
-                        Console.WriteLine("Begin load the server type dictionary. This will make all user-defined types known.");
-
-                        stopWatch.Reset();
-                        stopWatch.Start();
-
-                        var complexTypeSystem = client.GetComplexTypeSystem();
-                        complexTypeSystem.Load();
-
-                        stopWatch.Stop();
-
-                        Console.WriteLine($" Load type system took {stopWatch.ElapsedMilliseconds}ms.");
-
-                        Console.WriteLine("Custom types defined for this session:");
-                        foreach (var type in complexTypeSystem.GetDefinedTypes())
-                        {
-                            Console.WriteLine($"{type.Namespace}.{type.Name}");
-                        }
-
-                        Console.WriteLine($" Loaded {client.GetSessionDataTypeSystem().Count} dictionaries:");
-
-                        foreach (var dictionary in client.GetSessionDataTypeSystem())
-                        {
-                            Console.WriteLine($" + {dictionary.Value.Name}");
-                            foreach (var type in dictionary.Value.DataTypes)
-                            {
-                                Console.WriteLine($" -- {type.Key}:{type.Value}");
-                            }
-                        }
-
-
-                        Console.WriteLine("Begin read all variables with custom type");
-                        foreach (VariableNode variableNode in allCustomTypeVariables)
-                        {
-                            try
-                            {
-
-                                Console.WriteLine($" read variable {variableNode.NodeId.ToString()}");
-                                var value = client.ReadValue(variableNode.NodeId);
-
-                                CastInt32ToEnum(variableNode, value);
-                                Console.WriteLine($" -- {variableNode}:{value}");
-
-                                //get all Extension objects from value
-                                var allExtensionObjects = GetExtensionObjects(value);
-
-                                foreach (ExtensionObject extensionObject in allExtensionObjects)
-                                {
-                                    if (extensionObject != null)
-                                    {
-                                        var complexType = extensionObject.Body as BaseComplexType;
-                                        if (complexType != null)
-                                        {
-                                            foreach (var item in complexType.GetPropertyEnumerator())
-                                            {
-                                                if (Verbose)
-                                                {
-                                                    Console.WriteLine($" -- -- {item.Name}:{complexType[item.Name]}");
-                                                }
-                                                if (WriteComplexInt && item.PropertyType == typeof(Int32))
-                                                {
-                                                    var data = complexType[item.Name];
-                                                    if (data != null)
-                                                    {
-                                                        complexType[item.Name] = (Int32)data + 1;
-                                                    }
-                                                    Console.WriteLine($" -- -- Write: {item.Name}, {complexType[item.Name]}");
-                                                    client.WriteValue(variableNode.NodeId, value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            catch (ServiceResultException sre)
-                            {
-                                if (sre.StatusCode == StatusCodes.BadUserAccessDenied)
-                                {
-                                    Console.WriteLine($" -- {variableNode}: Access denied!");
-                                }
-                            }
-                        }
-
-
-                        Console.WriteLine("Begin monitoring all nodes with custom data type");
-                        //create a new subscription
-                        using (Subscription subscription = new Subscription())
-                        {
-                            subscription.PublishingEnabled = true;
-                            subscription.PublishingInterval = 5000;
-                            subscription.DisplayName = "mySubsription";
-
-                            //register subscription events
-                            subscription.StateChanged += Subscription_StateChanged;
-                            subscription.PublishStatusChanged += Subscription_PublishStatusChanged;
-
-                            //add new subscription to client
-                            client.AddSubscription(subscription);
-
-                            List<MonitoredItem> list = new List<MonitoredItem>();
-
-                            foreach (var customVariable in allCustomTypeVariables)
-                            {
-                                var newItem = new MonitoredItem(subscription.DefaultItem)
-                                {
-                                    DisplayName = customVariable.DisplayName.Text,
-                                    StartNodeId = ExpandedNodeId.ToNodeId(customVariable.NodeId, client.GetNamespaceUris()),
-                                    SamplingInterval = 500,
-                                    QueueSize = UInt32.MaxValue
-
-                                };
-                                newItem.Notification += OnComplexTypeNotification;
-                                list.Add(newItem);
-                            }
-
-                            subscription.AddItems(list);
-
-                            //apply changes
-                            subscription.ApplyChanges();
-                            //enable publishing mode of subscription
-                            //subscription.SetPublishingMode(true);
-                            //subscription.Modify();
-
-                            Console.WriteLine();
-                            Console.WriteLine("press enter for exit");
-                            Console.ReadLine();
-
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex);
-                        Console.WriteLine("press enter for exit");
-                        Console.ReadLine();
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("invalid number of Endpoint");
-                    Console.WriteLine("press enter for exit");
-                    Console.ReadLine();
-
-                }
-            }
-            else
-            {
-                Console.WriteLine("no endpoints found");
-                Console.WriteLine("press enter for exit");
+                Console.WriteLine("  No endpoints found. Is Server Workshop 15 running?");
                 Console.ReadLine();
+                return;
             }
 
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
-            Console.WriteLine("press enter for exit");
-            Console.ReadLine();
-        }
-    }
+            Console.WriteLine("endpoints found:");
+            for (int i = 0; i < endpoints.Count; i++)
+                Console.WriteLine($"  [{i}] {endpoints[i].ToDisplayString()}");
 
-    private void OnComplexTypeNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
-    {
-        try
-        {
-            //lock prozedure
-            System.Threading.Monitor.Enter(this);
-
-            //take variableNode from cache
-            var variableNode = allCustomTypeVariables.Where(n => ((VariableNode)n).NodeId == monitoredItem.StartNodeId).FirstOrDefault() as VariableNode;
-            if (variableNode != null)
+            Console.Write("  Please enter index of desired endpoint: ");
+            if (!int.TryParse(Console.ReadLine(), out int idx) || idx < 0 || idx >= endpoints.Count)
             {
-                //loop over all values 
-                foreach (var value in monitoredItem.DequeueValues())
+                Console.WriteLine("  Invalid selection.");
+                Console.ReadLine();
+                return;
+            }
+            Console.WriteLine();
+
+            var sessionConfig = SessionConfiguration.Build(
+                System.Reflection.Assembly.GetEntryAssembly().GetName().Name, endpoints[idx]);
+            sessionConfig.AutoConnect = false;
+
+            Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " +
+                              sessionConfig.CertificateStorePath);
+
+            client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
+            Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
+
+            client.ServerConnectionLost += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
+            client.ServerConnected      += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
+            client.SessionClosing       += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
+            client.CertificateValidation += CertificateValidationHandler;
+
+            Console.Write("  Connecting ... ");
+            client.Connect();
+            Console.WriteLine("OK");
+            Console.WriteLine();
+
+            // -- Load the server Type Dictionary ----------------------------------
+            // This is the key step for complex types: the SDK downloads the server's
+            // binary type descriptions and registers them so ExtensionObjects can be
+            // decoded into named fields (BaseComplexType with GetPropertyEnumerator).
+            // Without this step, structs arrive as raw byte[] and cannot be decoded.
+            Console.Write("  Loading server Type Dictionary ... ");
+            var complexTypeSystem = client.GetComplexTypeSystem();
+            complexTypeSystem.Load();
+            Console.WriteLine("OK");
+
+            var types = complexTypeSystem.GetDefinedTypes();
+            Console.WriteLine($"  {types.Length} custom type(s) loaded: " +
+                              string.Join(", ", types.Select(t => t.Name)));
+            Console.WriteLine();
+
+            // Command loop
+            while (true)
+            {
+                Console.WriteLine("  Select operation:");
+                Console.WriteLine("  1 - Read scalar variable          (Hierarchy.CNC_Machine_01.MainMotor.Speed)");
+                Console.WriteLine("  2 - Read array of scalars         (StructData.Sensor_Struct.Readings)");
+                Console.WriteLine("  3 - Read flat struct              (StructData.Motor_Struct)");
+                Console.WriteLine("  4 - Write flat struct field       (StructData.Motor_Struct.Speed)");
+                Console.WriteLine("  5 - Read nested struct            (StructData.Plant_Struct)");
+                Console.WriteLine("  6 - Read struct with array fields (StructData.Sensor_Struct)");
+                Console.WriteLine("  7 - Read array of structs         (StructData.Motor_Array)");
+                Console.WriteLine("  8 - Write array of structs element(StructData.Motor_Array.[1].Speed)");
+                Console.WriteLine("  9 - Exit");
+                Console.Write("  > ");
+
+                string input = Console.ReadLine();
+                Console.WriteLine();
+                if (string.IsNullOrEmpty(input) || input == "9") break;
+
+                try
                 {
-                    bool successfullyProcessed = false;
-                    if (value != null && value.Value != null && StatusCode.IsGood(value.StatusCode))
+                    switch (input)
                     {
-                        //cast eventual enum types
-                        CastInt32ToEnum(variableNode, value);
-                        Console.WriteLine($" -- {variableNode}:{value}");
-
-                        var allExtensionObjects = GetExtensionObjects(value);
-
-                        foreach (ExtensionObject extensionObject in allExtensionObjects)
-                        {
-                            //check if value a BaseComplexType
-                            var complexType = extensionObject.Body as BaseComplexType;
-                            if (complexType != null)
-                            {
-                                //loop over all known propertys
-                                foreach (var item in complexType.GetPropertyEnumerator())
-                                {
-                                    Console.WriteLine($" -- --{monitoredItem.DisplayName} : {item.Name} : Value => {complexType[item.Name]} : SourceTimestamp => {value.SourceTimestamp} : StatusCode => {value.StatusCode}");
-                                }
-                                successfullyProcessed = true;
-                            }
-
-                            if (!successfullyProcessed)
-                            {
-                                //simple print, value is not a known BaseComplexType 
-                                Console.WriteLine("{0}: {1}, {2}", monitoredItem.DisplayName, value.SourceTimestamp, value.StatusCode);
-                                if (Verbose)
-                                    Console.WriteLine(value);
-                            }
-                        }
+                        case "1": ReadScalar();           break;
+                        case "2": ReadArrayOfScalars();   break;
+                        case "3": ReadFlatStruct();        break;
+                        case "4": WriteFlatStructField();  break;
+                        case "5": ReadNestedStruct();      break;
+                        case "6": ReadStructWithArrays();  break;
+                        case "7": ReadArrayOfStructs();    break;
+                        case "8": WriteArrayOfStructs();   break;
                     }
-
-                    //simple print, value is not a known BaseComplexType 
-                    MonitoredItemNotification notification = e.NotificationValue as MonitoredItemNotification;
-                    Console.WriteLine("{0}: {1}, {2}", monitoredItem.DisplayName, notification.Value.SourceTimestamp, notification.Value.StatusCode);
-                    if (Verbose)
-                        Console.WriteLine(notification.Value);
-
                 }
-            }
-            else
-            {
-                //simple print, value is not a known variableNode 
-                MonitoredItemNotification notification = e.NotificationValue as MonitoredItemNotification;
-                Console.WriteLine("{0}: {1}, {2}", monitoredItem.DisplayName, notification.Value.SourceTimestamp, notification.Value.StatusCode);
-                if (Verbose)
-                    Console.WriteLine(notification.Value);
+                catch (Exception ex)
+                {
+                    Console.WriteLine("  Error: " + ex.Message);
+                }
+
+                Console.WriteLine();
             }
 
+            client.Disconnect();
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex);
+            Console.WriteLine("  Error: " + ex.Message);
         }
         finally
         {
-            System.Threading.Monitor.Exit(this);
+            Console.WriteLine("press enter for exit");
+            Console.ReadLine();
+            if (client != null && client.GetSessionState().Equals(SessionState.Connected))
+                client.Disconnect();
         }
     }
 
+    // ── Level 1: Scalar variable ──────────────────────────────────────────────
 
-    private List<ExtensionObject> GetExtensionObjects(DataValue value)
+    void ReadScalar()
     {
-        List<ExtensionObject> allExtensionObjects = new List<ExtensionObject>();
-        if (value != null && value.Value != null && StatusCode.IsGood(value.StatusCode))
+        // A scalar variable is the simplest case - just ReadValue by browse path.
+        // Server 15 Part A creates an Object hierarchy with individual Variables.
+        string path = "Objects.Hierarchy.CNC_Machine_01.MainMotor.Speed";
+        DataValue value = client.ReadValue(path);
+        Console.WriteLine($"  Path:   {path}");
+        Console.WriteLine($"  Value:  {value.Value}");
+        Console.WriteLine($"  Status: {value.StatusCode}");
+        Console.WriteLine($"  Time:   {value.SourceTimestamp.ToLocalTime():T}");
+    }
+
+    // ── Level 2: Array of scalars ─────────────────────────────────────────────
+
+    void ReadArrayOfScalars()
+    {
+        // An array variable has ValueRank=OneDimension.
+        // ReadValue returns the array directly - no ExtensionObject needed.
+        // Server 15 Part D creates SensorDataType with a double[4] Readings field.
+        // The child node "Readings" is a scalar array variable.
+        string path = "Objects.StructData.Sensor_Struct.Readings";
+        DataValue value = client.ReadValue(path);
+        Console.WriteLine($"  Path:   {path}");
+        if (value.Value is double[] arr)
         {
-
-            //check if value a ExtensionObject or a array of ExtensionObject
-            if (value.Value.GetType().IsArray)
-            {
-                var extensionObjects = value.Value as ExtensionObject[];
-                if (extensionObjects != null)
-                    allExtensionObjects.AddRange(extensionObjects);
-            }
-            else
-            {
-                var extensionObject = value.Value as ExtensionObject;
-                if (extensionObject != null)
-                    allExtensionObjects.Add(extensionObject);
-            }
+            Console.WriteLine($"  Type:   double[{arr.Length}]");
+            for (int i = 0; i < arr.Length; i++)
+                Console.WriteLine($"  [{i}] = {arr[i]}");
         }
-        return allExtensionObjects;
-    }
-
-    private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
-    {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
-    }
-
-    private void Subscription_PublishStatusChanged(object sender, EventArgs e)
-    {
-        /*
-        check your publish state of your subscription
-        if the publish state permanent stopped, then you have to recreate your subscription with old subscription as template
-        In this case, please have a look to the PublishingInterval setting, possibly be the value must be increased
-        */
-
-        Subscription subscription = sender as Subscription;
-        if (subscription != null)
-        {
-            PublishingState currentpublishingState = subscription.PublishingStopped ? PublishingState.STOPPED : PublishingState.RUNNING;
-            if (currentpublishingState != publishingState || currentpublishingState == PublishingState.STOPPED)
-                Console.WriteLine(DateTime.Now.ToLocalTime() + "Publishing state of Subscription " + UaClient.SubscriptionToString((Subscription)sender) + " => " + currentpublishingState.ToString());
-
-            publishingState = currentpublishingState;
-        }
-    }
-
-    void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
-    {
-        //external certificate validation
-        if (ServiceResult.IsGood(e.Error))
-            e.Accept = true;
-        else if (!e.ContainsUnsuppressibleStatusCodes)
-            e.Accept = true;
-        else if (e.ContainsUnsuppressibleStatusCodes)
-            e.AcceptAll = true; //you can accept all unsuppressible statuscode with this flag
         else
         {
-            throw new Exception(string.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo));
+            Console.WriteLine($"  Value:  {value.Value}");
+        }
+        Console.WriteLine($"  Status: {value.StatusCode}");
+    }
+
+    // ── Level 3: Flat struct ──────────────────────────────────────────────────
+
+    void ReadFlatStruct()
+    {
+        // A struct variable holds an ExtensionObject.
+        // After loading the Type Dictionary, the SDK decodes it into a
+        // BaseComplexType with named fields accessible via GetPropertyEnumerator().
+        // Server 15 Part B creates MotorDataType with Speed, Temperature, Running.
+        string path = "Objects.StructData.Motor_Struct";
+        DataValue value = client.ReadValue(path);
+        Console.WriteLine($"  Path:   {path}");
+        Console.WriteLine($"  Status: {value.StatusCode}");
+        PrintExtensionObject(value);
+    }
+
+    // ── Level 3: Write flat struct field ─────────────────────────────────────
+
+    void WriteFlatStructField()
+    {
+        // Individual struct fields are exposed as child Variable nodes.
+        // Writing a child node updates that field and the parent struct value.
+        // The path uses the struct variable path + "." + field name.
+        Console.Write("  New Speed value: ");
+        if (!double.TryParse(Console.ReadLine(), out double newSpeed))
+        {
+            Console.WriteLine("  Invalid value.");
+            return;
+        }
+
+        string fieldPath = "Objects.StructData.Motor_Struct.Speed";
+        StatusCode result = client.WriteValue(fieldPath, newSpeed);
+        Console.WriteLine($"  Written {newSpeed} to {fieldPath}");
+        Console.WriteLine($"  Result: {result}");
+
+        // Read back to verify
+        Console.WriteLine("  Reading back Motor_Struct:");
+        ReadFlatStruct();
+    }
+
+    // ── Level 4: Nested struct ────────────────────────────────────────────────
+
+    void ReadNestedStruct()
+    {
+        // A nested struct contains another struct as a field.
+        // Server 15 Part C creates PlantDataType with Motor and Machine fields.
+        // The SDK decodes the whole tree - nested structs appear as sub-properties.
+        // Child nodes use dotted paths: Plant_Struct.Motor.Speed
+        string path = "Objects.StructData.Plant_Struct";
+        DataValue value = client.ReadValue(path);
+        Console.WriteLine($"  Path:   {path}");
+        Console.WriteLine($"  Status: {value.StatusCode}");
+        Console.WriteLine();
+        Console.WriteLine("  Top-level fields:");
+        PrintExtensionObject(value);
+        Console.WriteLine();
+
+        // Read individual nested fields via child node paths
+        Console.WriteLine("  Nested field access via child nodes:");
+        string[] nestedPaths = {
+            "Objects.StructData.Plant_Struct.PlantName",
+            "Objects.StructData.Plant_Struct.Motor.Speed",
+            "Objects.StructData.Plant_Struct.Motor.Temperature",
+            "Objects.StructData.Plant_Struct.Machine.State",
+            "Objects.StructData.Plant_Struct.Machine.CycleCount"
+        };
+        foreach (string p in nestedPaths)
+        {
+            DataValue v = client.ReadValue(p);
+            Console.WriteLine($"  {p.Split('.')[^1],20} = {v.Value}");
         }
     }
 
+    // ── Level 5: Struct with array fields ─────────────────────────────────────
 
-    private void Client_ServerConnected(object sender, EventArgs e)
+    void ReadStructWithArrays()
     {
-        //event opc ua server is connected
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
+        // A struct can have array fields (e.g. double[4]).
+        // Server 15 Part D creates SensorDataType with Readings[4] and Thresholds[2].
+        string path = "Objects.StructData.Sensor_Struct";
+        DataValue value = client.ReadValue(path);
+        Console.WriteLine($"  Path:   {path}");
+        Console.WriteLine($"  Status: {value.StatusCode}");
+        PrintExtensionObject(value);
+        Console.WriteLine();
+
+        // Array fields are also accessible as child nodes
+        Console.WriteLine("  Array fields via child nodes:");
+        DataValue readings   = client.ReadValue("Objects.StructData.Sensor_Struct.Readings");
+        DataValue thresholds = client.ReadValue("Objects.StructData.Sensor_Struct.Thresholds");
+
+        if (readings.Value is double[] r)
+            Console.WriteLine($"  Readings   = [{string.Join(", ", r)}]");
+        if (thresholds.Value is double[] t)
+            Console.WriteLine($"  Thresholds = [{string.Join(", ", t)}]");
     }
 
-    private void Client_ServerConnectionLost(object sender, EventArgs e)
-    {
-        //event connection to opc ua server lost
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
-    }
+    // ── Level 6: Array of structs ─────────────────────────────────────────────
 
-    void Client_KeepAlive(ISession session, KeepAliveEventArgs e)
+    void ReadArrayOfStructs()
     {
-        //catch the keepalive event of opc ua server
-    }
+        // An array of structs has child nodes for each element.
+        // The element BrowseNames are "Motor_Array[0]", "Motor_Array[1]", etc.
+        // We browse the parent node to find the element NodeIds.
+        Console.WriteLine("  Reading Motor_Array elements via child nodes:");
+        Console.WriteLine("  (Each element is a separate ExtensionObject)");
+        Console.WriteLine();
 
-    private void Client_SessionClosing(object sender, EventArgs e)
-    {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
-    }
-
-
-    /// <summary>
-    /// Helper to cast a enumeration node value to an enumeration type.
-    /// </summary>
-    private void CastInt32ToEnum(VariableNode variableNode, DataValue value)
-    {
-        if (value.Value?.GetType() == typeof(Int32))
+        NodeId arrayNodeId = client.GetNodeIdByPath("Objects.StructData.Motor_Array");
+        if (arrayNodeId == null)
         {
-            // test if this is an enum datatype?
-            Type systemType = client.GetSession().Factory.GetSystemType(NodeId.ToExpandedNodeId(variableNode.DataType, client.GetNamespaceUris()));
-            if (systemType != null)
+            Console.WriteLine("  Could not find Motor_Array.");
+            return;
+        }
+
+        // Browse children to find element nodes (BrowseName = "Motor_Array[N]")
+        var children = client.BrowseFull(arrayNodeId);
+        int elemIndex = 0;
+        foreach (var child in children)
+        {
+            if (child.BrowseName.Name.Contains("["))
             {
-                value.Value = Enum.ToObject(systemType, value.Value);
+                NodeId elemNodeId = (NodeId)child.NodeId;
+                DataValue value = client.ReadValue(elemNodeId);
+                Console.WriteLine($"  Motor_Array[{elemIndex}] ({child.BrowseName.Name}):");
+                PrintExtensionObject(value, "    ");
+
+                // Also read individual fields via child nodes of the element
+                var elemChildren = client.BrowseFull(elemNodeId);
+                foreach (var field in elemChildren)
+                {
+                    DataValue fieldVal = client.ReadValue((NodeId)field.NodeId);
+                    Console.WriteLine($"    {field.BrowseName.Name} = {fieldVal.Value}");
+                }
+                Console.WriteLine();
+                elemIndex++;
             }
         }
     }
 
-    /// <summary>
-    /// Browse all variables in the objects folder.
-    /// </summary>
-    private IList<INode> BrowseAllVariables()
-    {
-        var result = new List<INode>();
-        var nodesToBrowse = new ExpandedNodeIdCollection();
-        nodesToBrowse.Add(ObjectIds.ObjectsFolder);
+    // ── Level 6: Write array of structs element ───────────────────────────────
 
-        while (nodesToBrowse.Count > 0)
+    void WriteArrayOfStructs()
+    {
+        Console.Write("  New Speed for Motor_Array[1]: ");
+        if (!double.TryParse(Console.ReadLine(), out double newSpeed))
         {
-            var nextNodesToBrowse = new ExpandedNodeIdCollection();
-            foreach (var node in nodesToBrowse)
+            Console.WriteLine("  Invalid value.");
+            return;
+        }
+
+        // Find Motor_Array[1] by browsing children
+        NodeId arrayNodeId = client.GetNodeIdByPath("Objects.StructData.Motor_Array");
+        if (arrayNodeId == null) { Console.WriteLine("  Could not find Motor_Array."); return; }
+
+        var children = client.BrowseFull(arrayNodeId);
+        var elemNodes = children.Where(c => c.BrowseName.Name.Contains("[")).ToList();
+
+        if (elemNodes.Count < 2)
+        {
+            Console.WriteLine("  Motor_Array has fewer than 2 elements.");
+            return;
+        }
+
+        // Find Speed child of element [1]
+        NodeId elem1NodeId = (NodeId)elemNodes[1].NodeId;
+        var fieldNodes = client.BrowseFull(elem1NodeId);
+        var speedNode  = fieldNodes.FirstOrDefault(f => f.BrowseName.Name == "Speed");
+
+        if (speedNode == null) { Console.WriteLine("  Speed field not found."); return; }
+
+        StatusCode result = client.WriteValue((NodeId)speedNode.NodeId, newSpeed);
+        Console.WriteLine($"  Written {newSpeed} to Motor_Array[1].Speed");
+        Console.WriteLine($"  Result: {result}");
+
+        // Read back element [1]
+        Console.WriteLine("  Reading back Motor_Array[1]:");
+        DataValue value = client.ReadValue(elem1NodeId);
+        PrintExtensionObject(value, "    ");
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Prints the fields of an ExtensionObject decoded as BaseComplexType.
+    /// After GetComplexTypeSystem().Load() the SDK can decode structs into
+    /// named properties accessible via GetPropertyEnumerator().
+    /// </summary>
+    void PrintExtensionObject(DataValue value, string indent = "  ")
+    {
+        if (value?.Value == null)
+        {
+            Console.WriteLine($"{indent}(null)");
+            return;
+        }
+
+        var ext = value.Value as ExtensionObject;
+        if (ext == null && value.Value is ExtensionObject[] arr && arr.Length > 0)
+            ext = arr[0];
+
+        if (ext?.Body is BaseComplexType complexType)
+        {
+            foreach (var prop in complexType.GetPropertyEnumerator())
             {
-                try
+                object fieldValue = complexType[prop.Name];
+                if (fieldValue is BaseComplexType nested)
                 {
-                    var organizers = client.GetNodeCache().FindReferencesAsync(
-                        node,
-                        ReferenceTypeIds.Organizes,
-                        false,
-                        false).GetAwaiter().GetResult();
-                    var components = client.GetNodeCache().FindReferencesAsync(
-                        node,
-                        ReferenceTypeIds.HasComponent,
-                        false,
-                        false).GetAwaiter().GetResult();
-                    var properties = client.GetNodeCache().FindReferencesAsync(
-                        node,
-                        ReferenceTypeIds.HasProperty,
-                        false,
-                        false).GetAwaiter().GetResult();
-                    nextNodesToBrowse.AddRange(organizers
-                        .Where(n => n is ObjectNode)
-                        .Select(n => n.NodeId).ToList());
-                    nextNodesToBrowse.AddRange(components
-                        .Where(n => n is ObjectNode)
-                        .Select(n => n.NodeId).ToList());
-                    result.AddRange(organizers.Where(n => n is VariableNode));
-                    result.AddRange(components.Where(n => n is VariableNode));
-                    result.AddRange(properties.Where(n => n is VariableNode));
+                    Console.WriteLine($"{indent}{prop.Name}:");
+                    foreach (var subProp in nested.GetPropertyEnumerator())
+                        Console.WriteLine($"{indent}  {subProp.Name} = {nested[subProp.Name]}");
                 }
-                catch (ServiceResultException sre)
+                else if (fieldValue is Array fieldArr)
                 {
-                    if (sre.StatusCode == StatusCodes.BadUserAccessDenied)
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < fieldArr.Length; i++)
                     {
-                        Console.WriteLine($"Access denied: Skip node {node}.");
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(fieldArr.GetValue(i));
                     }
+                    sb.Append("]");
+                    Console.WriteLine($"{indent}{prop.Name} = {sb}");
+                }
+                else
+                {
+                    Console.WriteLine($"{indent}{prop.Name} = {fieldValue}");
                 }
             }
-            nodesToBrowse = nextNodesToBrowse;
         }
-        return result;
+        else
+        {
+            // Type Dictionary not loaded or type not known - show raw value
+            Console.WriteLine($"{indent}Raw value: {value.Value}");
+            Console.WriteLine($"{indent}Tip: Ensure GetComplexTypeSystem().Load() was called.");
+        }
     }
 
-    private enum PublishingState
+    void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
     {
-        UNDEFINED,
-        RUNNING,
-        STOPPED
+        if (ServiceResult.IsGood(e.Error))                 e.Accept = true;
+        else if (!e.ContainsUnsuppressibleStatusCodes)     e.Accept = true;
+        else if (e.ContainsUnsuppressibleStatusCodes)      e.AcceptAll = true;
+        else throw new Exception($"Certificate validation failed: {e.Error.Code}");
     }
 }

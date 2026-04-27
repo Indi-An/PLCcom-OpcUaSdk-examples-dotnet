@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -69,14 +69,17 @@ Public Class Program
              Console.WriteLine("║    * Construct NodeIds from string notation                  ║")
              Console.WriteLine("║    * Read single and multiple values (sync and async)        ║")
              Console.WriteLine("║    * Write values and check the StatusCode                   ║")
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)          ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                    ║")
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
             'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -86,7 +89,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -120,25 +123,27 @@ Public Class Program
 
                     'Read multiple Nodes within one call 
 
-                    'Resolve browse paths to NodeIds first
-                    Dim temperatureId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature")
-                    Dim rpmId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM")
-                    Dim pressureId As NodeId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure")
+                    ' NodeIds are fixed for Server Workshop 11 - assigned in creation order
+                    ' ns=2 is the first custom namespace; i= is the sequential node counter
+                    ' Plant=1, Line1=2, Machine1=3, Temperature=4, Pressure=5, RPM=6
+                    Dim temperatureId As NodeId = New NodeId("ns=2;i=4") ' Double
+                    Dim rpmId As NodeId = New NodeId("ns=2;i=6")         ' Int32
+                    Dim pressureId As NodeId = New NodeId("ns=2;i=5")    ' Float
 
                     'first create a ReadValueIdCollection and fill this with ReadValueId objects
                     Dim nodesToRead As ReadValueIdCollection = New ReadValueIdCollection()
                     Dim nodeToRead As ReadValueId = New ReadValueId()
-                    nodeToRead.NodeId = temperatureId 'Objects.Plant.Line1.Machine1.Temperature
+                    nodeToRead.NodeId = temperatureId ' ns=2;i=4
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = rpmId 'Objects.Plant.Line1.Machine1.RPM
+                    nodeToRead.NodeId = rpmId ' ns=2;i=6
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = pressureId 'Objects.Plant.Line1.Machine1.Pressure
+                    nodeToRead.NodeId = pressureId ' ns=2;i=5
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
@@ -169,17 +174,17 @@ Public Class Program
                     'create a WriteValueCollection and fill this with WriteValue objects
                     Dim nodesToWrite As WriteValueCollection = New WriteValueCollection()
                     Dim writeValue As WriteValue = New WriteValue()
-                    writeValue.NodeId = temperatureId 'Objects.Plant.Line1.Machine1.Temperature
+                    writeValue.NodeId = temperatureId ' ns=2;i=4
                     writeValue.Value = New DataValue(25.5)
                     writeValue.AttributeId = Attributes.Value
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = rpmId 'Objects.Plant.Line1.Machine1.RPM
+                    writeValue.NodeId = rpmId ' ns=2;i=6
                     writeValue.AttributeId = Attributes.Value
                     writeValue.Value = New DataValue(1750)
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = pressureId 'Objects.Plant.Line1.Machine1.Pressure
+                    writeValue.NodeId = pressureId ' ns=2;i=5
                     writeValue.AttributeId = Attributes.Value
                     writeValue.Value = New DataValue(1.05F)
                     nodesToWrite.Add(writeValue)

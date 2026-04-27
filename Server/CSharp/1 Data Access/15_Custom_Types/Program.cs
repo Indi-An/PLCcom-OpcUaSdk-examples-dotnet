@@ -95,36 +95,32 @@ Console.WriteLine();
 // =============================================================================
 // Step 1: Configure and start the server
 // =============================================================================
-var config = new UaServerConfiguration
-{
-    ApplicationName  = "PLCcom Workshop 15 - Custom Types",
-    ApplicationUri   = "urn:localhost:PLCcom:Workshop:15",
-    ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "My OPC UA Server",
-    SoftwareVersion  = "1.0.0",
-    BuildNumber      = "42",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/custom-types",
-    CertificateStorePath = @".\pki"
-};
+// All server settings are defined in CreateConfig() below.
+// See that function for a full description of every available option.
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (sender, e) => e.Accept = true;
 
+server.SessionCreated += (s, e) =>
+    Console.WriteLine($"  [SESSION+] {e.SessionName ?? "unknown"} from {e.ClientUri ?? "unknown"}");
+server.SessionClosed += (s, e) =>
+    Console.WriteLine($"  [SESSION-] {e.SessionName ?? "unknown"}");
+
 server.ValuesWritten += (s, e) =>
 {
     foreach (var item in e.Items)
-        Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}");
+    {
+        if (item.Value is Dictionary<string, object> fields)
+        {
+            Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId})");
+            foreach (var kvp in fields)
+                Console.WriteLine($"       {kvp.Key} = {kvp.Value}");
+        }
+        else
+            Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}");
+    }
 };
 
 Console.Write("Starting server ... ");
@@ -151,7 +147,7 @@ Console.WriteLine();
 //   - No formal type definition that clients can introspect
 Console.WriteLine("-- Part A: Object Hierarchy -------------------------------------");
 
-var hierarchy = server.CreateFolder("Hierarchy");
+var hierarchy = server.CreateFolder("Hierarchy", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
 // Define ObjectTypes (appear under Types -> ObjectTypes in the address space)
 var motorTypeId   = server.CreateObjectType("MotorType");
@@ -159,19 +155,19 @@ var bearingTypeId = server.CreateObjectType("BearingType");
 var machineTypeId = server.CreateObjectType("MachineType");
 
 // Create the machine instance with typed components
-var machine = server.CreateObject(hierarchy, "CNC_Machine_01", typeDefinitionId: machineTypeId);
+var machine = server.CreateObject(hierarchy, "CNC_Machine_01", UaRolePermissions.WITHOUT_RESTRICTIONS, machineTypeId);
 
-var motor = server.CreateObject(machine.NodeId, "MainMotor", typeDefinitionId: motorTypeId);
-server.CreateVariable<double>(motor, "Speed",       initialValue: 1500.0);
-server.CreateVariable<double>(motor, "Temperature", initialValue: 45.0);
-server.CreateVariable<bool>  (motor, "Running",     initialValue: true);
+var motor = server.CreateObject(machine.NodeId, "MainMotor", UaRolePermissions.WITHOUT_RESTRICTIONS, motorTypeId);
+server.CreateVariable<double>(motor, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 1500.0);
+server.CreateVariable<double>(motor, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 45.0);
+server.CreateVariable<bool>  (motor, "Running",     UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: true);
 
-var bearing = server.CreateObject(machine.NodeId, "MainBearing", typeDefinitionId: bearingTypeId);
-server.CreateVariable<double>(bearing, "Temperature", initialValue: 38.0);
-server.CreateVariable<double>(bearing, "Vibration",   initialValue: 0.5);
+var bearing = server.CreateObject(machine.NodeId, "MainBearing", UaRolePermissions.WITHOUT_RESTRICTIONS, bearingTypeId);
+server.CreateVariable<double>(bearing, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 38.0);
+server.CreateVariable<double>(bearing, "Vibration", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 0.5);
 
-server.CreateVariable<string>(machine, "State",      initialValue: "Running");
-server.CreateVariable<long>  (machine, "CycleCount", initialValue: 0L);
+server.CreateVariable<string>(machine, "State", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "Running");
+server.CreateVariable<long>  (machine, "CycleCount", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 0L);
 
 Console.WriteLine($"  {machine.Path}");
 Console.WriteLine($"    MainMotor    (MotorType):   Speed=1500, Temp=45, Running=true");
@@ -196,7 +192,7 @@ Console.WriteLine();
 // SetField<T> / GetField<T> access individual fields by name.
 Console.WriteLine("-- Part B: Flat Structs -----------------------------------------");
 
-var structFolder = server.CreateFolder("StructData");
+var structFolder = server.CreateFolder("StructData", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
 // Define two flat struct types
 var motorDataTypeId = server.CreateStructDataType("MotorDataType",
@@ -210,12 +206,12 @@ var machineDataTypeId = server.CreateStructDataType("MachineDataType",
     ("MotorSpeed", DataTypeIds.Double, null));
 
 // Create struct variables and set initial values
-var motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId);
+var motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 motorStruct.SetField<double>("Speed",       1500.0);
 motorStruct.SetField<double>("Temperature", 45.0);
 motorStruct.SetField<bool>  ("Running",     true);
 
-var machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId);
+var machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 machineStruct.SetField<string>("State",      "Running");
 machineStruct.SetField<long>  ("CycleCount", 0L);
 machineStruct.SetField<double>("MotorSpeed", 1500.0);
@@ -241,7 +237,7 @@ var plantDataTypeId = server.CreateStructDataType("PlantDataType",
     ("Motor",           motorDataTypeId,    null),
     ("Machine",         machineDataTypeId,  null));
 
-var plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId);
+var plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 plantStruct.SetField<string>("PlantName",       "Factory_01");
 plantStruct.SetField<int>   ("ProductionCount", 42);
 
@@ -273,7 +269,7 @@ var sensorDataTypeId = server.CreateStructDataType("SensorDataType",
     ("Readings",   DataTypeIds.Double, new uint[] { 4 }),
     ("Thresholds", DataTypeIds.Double, new uint[] { 2 }));
 
-var sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId);
+var sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 sensorStruct.SetField<string>  ("Name",       "TempSensor_01");
 sensorStruct.SetField<double[]>("Readings",   new double[] { 23.5, 24.1, 22.8, 25.0 });
 sensorStruct.SetField<double[]>("Thresholds", new double[] { 50.0, 75.0 });
@@ -325,7 +321,7 @@ var factoryDataTypeId = server.CreateStructDataType("FactoryDataType",
     ("FactoryName", DataTypeIds.String,  null),
     ("Motors",      motorDataTypeId,     new uint[] { 2 }));
 
-var factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId);
+var factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 factoryStruct.SetField<string>("FactoryName", "MainFactory");
 
 // Array-of-structs fields use "Field.[N].SubField" path syntax
@@ -357,7 +353,7 @@ var gridDataTypeId = server.CreateStructDataType("GridDataType",
     ("Label",  DataTypeIds.String, null),
     ("Matrix", DataTypeIds.Double, new uint[] { 2, 3 }));
 
-var gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId);
+var gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 gridStruct.SetField<string>("Label", "HeatMap_01");
 gridStruct.SetField("Matrix", new Matrix(
     new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 },
@@ -391,3 +387,100 @@ Console.WriteLine("║                                                          
 Console.WriteLine("║  Press ENTER to exit.                                        ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ReadLine();
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 15 - Custom Types",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:15",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/custom-types",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+
+        // ── Endpoints ────────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine($"    VendorName={config.VendorName ?? "(not set)"}  ProductName={config.VendorProductName ?? "(not set)"}  Version={config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine($"    Read={config.MaxNodesPerRead}  Write={config.MaxNodesPerWrite}  Browse={config.MaxNodesPerBrowse}  Method={config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    HistRD={config.MaxNodesPerHistoryReadData}  HistRE={config.MaxNodesPerHistoryReadEvents}  HistUD={config.MaxNodesPerHistoryUpdateData}  HistUE={config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    Register={config.MaxNodesPerRegisterNodes}  Translate={config.MaxNodesPerTranslateBrowsePathsToNodeIds}  NodeMgmt={config.MaxNodesPerNodeManagement}  MonItems={config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
+}

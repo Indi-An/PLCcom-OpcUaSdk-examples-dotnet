@@ -33,7 +33,8 @@
 //   * How to encode arrays of structures
 //   * How to call methods with complex structured arguments
 //
-// Target server: opc.tcp://localhost:48410
+// Required server: Server Workshop 13 (Methods)
+// Target server:   opc.tcp://localhost:48410
 // ==============================================================================
 
 using PLCcom.Opc.Ua;
@@ -57,7 +58,6 @@ class Program
 
              Console.WriteLine();
 
-
              Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
              Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 25: Advanced Calls      ║");
              Console.WriteLine("║                                                              ║");
@@ -69,6 +69,9 @@ class Program
              Console.WriteLine("║    * Encode nested structures with BinaryEncoder             ║");
              Console.WriteLine("║    * Embed ExtensionObjects inside other structures          ║");
              Console.WriteLine("║    * Encode arrays of structures                             ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 13 (Methods)               ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -77,7 +80,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -88,7 +91,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -122,7 +125,7 @@ class Program
 
 
                         /*
-                        let�s starting a method call, step by step
+                        lets starting a method call, step by step
                         In this case, we pass a structure named as 'DataStructure_One" constructed as follows:
 
                         structure DataStructure_One = 
@@ -144,7 +147,7 @@ class Program
                             int myIntValue12
                         }
 
-                        Object to which the method should be applied is named as "myObjectNode"
+                        Object to which the method should be applied is named as "myObjectNode_Advanced"
                         Method is named as "myMethodNode"
                         */
 
@@ -234,11 +237,38 @@ class Program
                         VariantCollection inputArguments = new VariantCollection();
                         inputArguments.Add(new Variant(extensionObjectWithInputArguments));
 
-                        //create a new NodeId for the Object to which the method should be applied by name and namespace
-                        NodeId objectNode = new NodeId("myObjectNode", 3);
+                        //resolve object and method via browse
+                        NodeId objectNode = client.GetNodeIdByPath("Objects.Plant.myObjectNode_Advanced");
+                        if (objectNode == null)
+                        {
+                            Console.WriteLine("myObjectNode_Advanced not found - is Server Workshop 13 running?");
+                            return;
+                        }
 
-                        //create a new NodeId for the Method by name and namespace
-                        NodeId methodNode = new NodeId("myMethodNode", 3);
+                        NodeId methodNode = null;
+                        var browseDesc = new BrowseDescription
+                        {
+                            NodeId = objectNode,
+                            BrowseDirection = BrowseDirection.Forward,
+                            ReferenceTypeId = ReferenceTypeIds.HasComponent,
+                            IncludeSubtypes = true,
+                            NodeClassMask = (uint)NodeClass.Method,
+                            ResultMask = (uint)BrowseResultMask.All
+                        };
+                        var refs = client.BrowseFull(new BrowseDescriptionCollection { browseDesc });
+                        foreach (var r in refs)
+                        {
+                            if (r.BrowseName.Name == "myMethodNode")
+                            {
+                                methodNode = ExpandedNodeId.ToNodeId(r.NodeId, client.GetNamespaceUris());
+                                break;
+                            }
+                        }
+                        if (methodNode == null)
+                        {
+                            Console.WriteLine("myMethodNode not found under myObjectNode_Advanced");
+                            return;
+                        }
 
                         //create a CallMethodRequest instance and pass your arguments
                         CallMethodRequest request = new CallMethodRequest();

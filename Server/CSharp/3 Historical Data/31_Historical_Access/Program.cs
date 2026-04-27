@@ -69,23 +69,8 @@ Console.WriteLine("║  * In-memory store with max 500 entries per variable     
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.WriteLine();
 
-var config = new UaServerConfiguration
-{
-    ApplicationName = "PLCcom Workshop 31 - Historical Access",
-    ApplicationUri  = "urn:localhost:PLCcom:Workshop:31",
-    ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    CertificateStorePath = @".\pki"
-};
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (s, e) => e.Accept = true;
@@ -96,11 +81,11 @@ catch (Exception ex) { Console.WriteLine("FAILED"); Console.WriteLine(ex.Message
 Console.WriteLine("OK");
 Console.WriteLine();
 
-var plant  = server.CreateFolder("Plant");
-var sensor = server.CreateFolder(plant, "Sensor");
+var plant  = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var sensor = server.CreateFolder(plant, "Sensor", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-var temperature = server.CreateVariable<double>(sensor, "Temperature", initialValue: 20.0);
-var humidity    = server.CreateVariable<double>(sensor, "Humidity",    initialValue: 50.0);
+var temperature = server.CreateVariable<double>(sensor, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 20.0);
+var humidity    = server.CreateVariable<double>(sensor, "Humidity", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 50.0);
 
 // Add engineering units so clients can display the values correctly
 temperature.SetEURange(-40, 120);
@@ -161,4 +146,107 @@ while (true)
     Console.Write($"\r  Cycle={cycle}  T={temperature.Value:F1}C  " +
                   $"H={humidity.Value:F1}%RH  History={hist.Count} entries  ");
     Thread.Sleep(1000);
+}
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 31 - Historical Access",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:31",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/historical-access",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+        // ── Endpoints ──────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // ── Endpoint Host Normalization ───────────────────────────────────────
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None                   = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("-- Active Server Configuration ------------------------------");
+    Console.WriteLine("  ApplicationName  : " + config.ApplicationName);
+    Console.WriteLine("  ApplicationUri   : " + config.ApplicationUri);
+    Console.WriteLine("  NamespaceUri     : " + (config.NamespaceUri ?? "(default)"));
+    Console.WriteLine("  ManufacturerName : " + (config.ManufacturerName ?? "(not set)"));
+    Console.WriteLine("  ProductName      : " + (config.ProductName ?? "(not set)"));
+    Console.WriteLine("  SoftwareVersion  : " + (config.SoftwareVersion ?? "(auto-detect)"));
+    Console.WriteLine("  BuildNumber      : " + (config.BuildNumber ?? "(auto-detect)"));
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine("    " + addr);
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine("    VendorName=" + (config.VendorName ?? "(not set)") +
+                      "  ProductName=" + (config.VendorProductName ?? "(not set)") +
+                      "  Version=" + (config.VendorProductVersion ?? "(not set)"));
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine("    Read=" + config.MaxNodesPerRead + "  Write=" + config.MaxNodesPerWrite +
+                      "  Browse=" + config.MaxNodesPerBrowse + "  Method=" + config.MaxNodesPerMethodCall);
+    Console.WriteLine("    HistRD=" + config.MaxNodesPerHistoryReadData + "  HistRE=" + config.MaxNodesPerHistoryReadEvents +
+                      "  HistUD=" + config.MaxNodesPerHistoryUpdateData + "  HistUE=" + config.MaxNodesPerHistoryUpdateEvents);
+    Console.WriteLine("    Register=" + config.MaxNodesPerRegisterNodes +
+                      "  Translate=" + config.MaxNodesPerTranslateBrowsePathsToNodeIds +
+                      "  NodeMgmt=" + config.MaxNodesPerNodeManagement +
+                      "  MonItems=" + config.MaxMonitoredItemsPerCall);
+    Console.WriteLine("-------------------------------------------------------------");
+    Console.WriteLine();
 }

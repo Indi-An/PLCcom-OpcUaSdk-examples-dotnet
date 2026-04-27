@@ -65,6 +65,9 @@ class Program
         Console.WriteLine("║    * Set username/password on SessionConfiguration           ║");
         Console.WriteLine("║    * UserIdentity is sent during ActivateSession             ║");
         Console.WriteLine("║    * Handle authentication failures                          ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Required server: Server Workshop 12 (User Authentication)   ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -82,7 +85,7 @@ class Program
             Console.WriteLine("  Discovering endpoints...");
             Console.WriteLine();
 
-            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), certificateValidator: CertificateValidationHandler);
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
 
             if (endpoints.Count == 0)
@@ -95,7 +98,7 @@ class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
             Console.WriteLine();
             for (int i = 0; i < endpoints.Count; i++)
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+                Console.WriteLine($"  [{i}] {endpoints[i].ToDisplayString()}");
 
             Console.WriteLine();
             Console.Write("  Please enter index of desired endpoint: ");
@@ -116,9 +119,22 @@ class Program
 
             // Set username/password authentication.
             // The UserIdentity is sent to the server during the ActivateSession call.
-            // The server validates the credentials and assigns a role.
-            // TODO: Replace with valid credentials for your server
-            sessionConfig.Identity = new UserIdentity("<username>", "<password>");
+            // The server validates the credentials and assigns a role to the session.
+            //
+            // Server Workshop 12 defines three users:
+            //   viewer   / viewer123   -> Role.Observer  (read-only)
+            //   operator / operator123 -> Role.Operator  (read + write)
+            //   admin    / admin123    -> Role.Engineer  (full access)
+            //
+            // The role only has effect if the server has set RolePermissions on its
+            // nodes via SetRolePermissions(). Server Workshop 12 does this - try
+            // connecting as viewer and writing a value to see BadUserAccessDenied.
+            Console.Write("  Username: ");
+            string username = Console.ReadLine();
+            Console.Write("  Password: ");
+            string password = ReadPassword();
+            Console.WriteLine();
+            sessionConfig.Identity = new UserIdentity(username, password);
 
             Console.WriteLine();
             Console.WriteLine("  Certificate store: " + sessionConfig.CertificateStorePath);
@@ -133,7 +149,7 @@ class Program
             client.ServerConnectionLost += (s, e) =>
                 Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss} Connection lost");
             client.KeepAlive += (session, e) => { };
-            client.CertificateValidation += (sender, e) => { e.Accept = true; };
+            client.CertificateValidation += CertificateValidationHandler;
 
             // -- Step 4: Connect --------------------------------------------------
             // If the credentials are wrong, Connect() throws a ServiceResultException
@@ -144,7 +160,47 @@ class Program
             Console.WriteLine($"  Session state: {client.GetSessionState()}");
             Console.WriteLine();
 
-            // -- Step 5: Disconnect -----------------------------------------------
+            // -- Step 5: Test permission-based access ----------------------------
+            // Server 12b uses IUaPermissionValidator (custom logic, no RolePermissions):
+            //   viewer   -> read only  (Write returns BadUserAccessDenied)
+            //   operator -> read + write + call
+            //   admin    -> full access
+            //
+            // Read Temperature - allowed for all users
+            NodeId temperatureId = client.GetNodeIdByPath("Objects.Plant.Temperature");
+            if (NodeId.IsNull(temperatureId))
+            {
+                Console.WriteLine("  Node Objects.Plant.Temperature not found - is Server 12b running?");
+                Console.ReadLine();
+                return;
+            }
+            object value = client.ReadValue(temperatureId);
+            Console.WriteLine($"  Read  Temperature = {value}  -> OK");
+
+            // Write Temperature - viewer gets BadUserAccessDenied
+            StatusCode writeResult = client.WriteValue(temperatureId, 99.9);
+            if (StatusCode.IsGood(writeResult))
+                Console.WriteLine($"  Write Temperature = 99.9   -> OK");
+            else
+                Console.WriteLine($"  Write Temperature = 99.9   -> {StatusCodes.GetBrowseName(writeResult.Code)}");
+            Console.WriteLine();
+
+            // -- Step 6: Test method call -----------------------------------------
+            // Call Reset - viewer gets BadUserAccessDenied
+            NodeId plantId = client.GetNodeIdByPath("Objects.Plant");
+            NodeId resetId = client.GetNodeIdByPath("Objects.Plant.Reset");
+            try
+            {
+                client.Call(plantId, resetId);
+                Console.WriteLine($"  Call   Reset              -> OK");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Call   Reset              -> {ex.Message}");
+            }
+            Console.WriteLine();
+
+            // -- Step 7: Disconnect -----------------------------------------------
             Console.WriteLine("  Press ENTER to disconnect and exit.");
             Console.ReadLine();
 
@@ -160,5 +216,34 @@ class Program
             Console.WriteLine("  Press ENTER to exit.");
             Console.ReadLine();
         }
+    }
+    void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
+    {
+        // Called when the server presents its certificate - both during opc.https
+        // discovery (TLS) and when a security policy other than None is used.
+        // Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = true;
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
+    }
+    static string ReadPassword()
+    {
+        var password = new System.Text.StringBuilder();
+        ConsoleKeyInfo key;
+        do
+        {
+            key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Backspace && password.Length > 0)
+            {
+                password.Remove(password.Length - 1, 1);
+                Console.Write("\b \b");
+            }
+            else if (key.Key != ConsoleKey.Enter && key.Key != ConsoleKey.Backspace)
+            {
+                password.Append(key.KeyChar);
+                Console.Write("*");
+            }
+        } while (key.Key != ConsoleKey.Enter);
+        Console.WriteLine();
+        return password.ToString();
     }
 }

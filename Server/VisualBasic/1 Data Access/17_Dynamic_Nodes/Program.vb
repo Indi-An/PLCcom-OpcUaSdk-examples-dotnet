@@ -58,25 +58,9 @@ Module Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 17 - Dynamic Nodes",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:17",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .ManufacturerName = "My Company GmbH",
-            .ProductName = "My OPC UA Server",
-            .SoftwareVersion = "1.0.0",
-            .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/dynamic-nodes",
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
@@ -104,9 +88,9 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part A: Initial address space ---------------------------------")
 
-            Dim plant = server.CreateFolder("Plant")
-            Dim line1 = server.CreateFolder(plant, "Line1")
-            Dim temp = server.CreateVariable(Of Double)(line1, "Temperature", initialValue:=22.0)
+            Dim plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim line1 = server.CreateFolder(plant, "Line1", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim temp = server.CreateVariable(Of Double)(line1, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=22.0)
 
             Console.WriteLine($"  {plant.Path,-45} {plant.NodeId}")
             Console.WriteLine($"  {line1.Path,-45} {line1.NodeId}")
@@ -137,9 +121,9 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part C: Dynamic node creation ---------------------------------")
 
-            Dim dynFolder = server.CreateFolder(plant, "DynamicNodes")
-            Dim dynVar1 = server.CreateVariable(Of Integer)(dynFolder, "Counter", initialValue:=42)
-            Dim dynVar2 = server.CreateVariable(Of String)(dynFolder, "Message", initialValue:="Hello")
+            Dim dynFolder = server.CreateFolder(plant, "DynamicNodes", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim dynVar1 = server.CreateVariable(Of Integer)(dynFolder, "Counter", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=42)
+            Dim dynVar2 = server.CreateVariable(Of String)(dynFolder, "Message", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="Hello")
 
             Console.WriteLine($"  Created: {dynVar1.Path,-40} = {dynVar1.Value}")
             Console.WriteLine($"  Created: {dynVar2.Path,-40} = {dynVar2.Value}")
@@ -173,7 +157,7 @@ Module Program
 
             Console.Write("  Creating ""Plant"" under Line1 (ancestor name): ")
             Try
-                server.CreateFolder(line1, "Plant")
+                server.CreateFolder(line1, "Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
                 Console.WriteLine("NOT DETECTED (unexpected)")
             Catch ex As ArgumentException
                 Console.WriteLine($"BLOCKED - {ex.Message}")
@@ -203,11 +187,9 @@ Module Program
                 deviceNumber += 1
                 Dim deviceName As String = $"Device_{deviceNumber}"
 
-                Dim deviceFolder = server.CreateFolder(plant, deviceName)
-                Dim devTemp = server.CreateVariable(Of Double)(deviceFolder, "Temperature",
-                    initialValue:=Math.Round(20.0 + rng.NextDouble() * 15.0, 1))
-                Dim devStatus = server.CreateVariable(Of String)(deviceFolder, "Status",
-                    initialValue:="Online")
+                Dim deviceFolder = server.CreateFolder(plant, deviceName, UaRolePermissions.WITHOUT_RESTRICTIONS)
+                Dim devTemp = server.CreateVariable(Of Double)(deviceFolder, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=Math.Round(20.0 + rng.NextDouble() * 15.0, 1))
+                Dim devStatus = server.CreateVariable(Of String)(deviceFolder, "Status", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="Online")
 
                 activeDevices.Enqueue((deviceName, deviceFolder.NodeId))
                 Console.WriteLine($"  + Discovered {deviceName}: Temp={devTemp.Value:F1}, Status={devStatus.Value}")
@@ -224,6 +206,96 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        ' ── Application Identity ──────────────────────────────────────────────
+        cfg.ApplicationName = "PLCcom Workshop 17 - Dynamic Nodes"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:17"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/dynamic-nodes"
+
+        ' ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+
+        ' ── Endpoints ────────────────────────────────────────────────────────
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+
+        ' ── Security Policies ────────────────────────────────────────────────
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+
+        ' ── User Authentication ───────────────────────────────────────────────
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+
+        ' ── PKI Certificate Store ─────────────────────────────────────────────
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+
+        ' ── Endpoint Host Normalization ───────────────────────────────────────
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None                   = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay = 5
+
+        ' ── VendorServerInfo ──────────────────────────────────────────────────
+        cfg.VendorName = "My Company GmbH"
+        cfg.VendorProductName = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+
+        ' ── OperationLimits ───────────────────────────────────────────────────
+        cfg.MaxNodesPerRead = 1000
+        cfg.MaxNodesPerWrite = 1000
+        cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData           = 100
+        cfg.MaxNodesPerHistoryReadEvents         = 100
+        cfg.MaxNodesPerHistoryUpdateData         = 100
+        cfg.MaxNodesPerHistoryUpdateEvents       = 100
+        cfg.MaxNodesPerMethodCall                = 200
+        cfg.MaxNodesPerRegisterNodes             = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement            = 1000
+        cfg.MaxMonitoredItemsPerCall             = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

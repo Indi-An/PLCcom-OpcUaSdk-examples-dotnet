@@ -62,6 +62,8 @@ class Program
         Console.WriteLine("║    * Load an X.509 certificate from a .pfx file              ║");
         Console.WriteLine("║    * Set certificate-based UserIdentity on a session         ║");
         Console.WriteLine("║    * Difference to username/password authentication          ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -79,7 +81,7 @@ class Program
             Console.WriteLine("  Discovering endpoints...");
             Console.WriteLine();
 
-            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), certificateValidator: CertificateValidationHandler);
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
 
             if (endpoints.Count == 0)
@@ -92,7 +94,7 @@ class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
             Console.WriteLine();
             for (int i = 0; i < endpoints.Count; i++)
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+                Console.WriteLine($"  [{i}] {endpoints[i].ToDisplayString()}");
 
             Console.WriteLine();
             Console.Write("  Please enter index of desired endpoint: ");
@@ -136,7 +138,7 @@ class Program
             client.ServerConnectionLost += (s, e) =>
                 Console.WriteLine($"  [ConnectionLost] {DateTime.Now:HH:mm:ss} Connection lost");
             client.KeepAlive += (session, e) => { };
-            client.CertificateValidation += (sender, e) => { e.Accept = true; };
+            client.CertificateValidation += CertificateValidationHandler;
 
             // -- Step 4: Connect --------------------------------------------------
             Console.Write("  Connecting with certificate ... ");
@@ -161,5 +163,13 @@ class Program
             Console.WriteLine("  Press ENTER to exit.");
             Console.ReadLine();
         }
+    }
+    void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
+    {
+        // Called when the server presents its certificate - both during opc.https
+        // discovery (TLS) and when a security policy other than None is used.
+        // Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = true;
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
     }
 }

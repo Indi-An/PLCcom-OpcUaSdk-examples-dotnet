@@ -30,14 +30,15 @@ PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for
 - Easy to use, many functions can be called by a single line of code
 - Automatic Connect, Reconnect, and Disconnect functionality
 - Active keep-alive monitoring of the server state
-- OPC UA Client **and** Server SDK in a single assembly
+- Full **Client SDK** and **Server SDK** in a single assembly
 - Support for **opc.tcp** and **opc.https** transport protocols
 - Support for the most common OPC UA specifications:
   - Data Access (most used)
   - Alarm and Conditions
-  - Historical Data
-  - Historical Events
+  - Historical Data and Historical Events
   - Complex / Structured Data Types
+  - Simple Events
+  - Reverse Connect
 - Extensive tutorials for C# and Visual Basic included
 
 For a full list of supported features and detailed descriptions, refer to the official documentation [here](https://www.indi-an.com/help_opc_ua_client_sdk/net/help/html/R_Project_PLCcom_Opc_Ua_Sdk_Documentation.htm).
@@ -69,9 +70,10 @@ For a full list of supported features and detailed descriptions, refer to the of
 | 32 | Alarm List | Maintain a live list of all active alarms |
 | 33 | Alarm Conditions | Acknowledge, confirm and comment on alarms |
 | **4 Historical Data** | | |
-| 41 | Historical Data | Read, insert, update and delete historical values |
-| 42 | Read Historical Events | Read past events from the server history |
-| 43 | Monitoring Historical Events | Subscribe to historical event notifications |
+| 41 | Historical Data | Read historical values from the server |
+| 42 | Historical Data Update | Insert, update, replace and delete historical values |
+| 43 | Read Historical Events | Read past events from the server history |
+| 44 | Monitoring Historical Events | Subscribe to historical event notifications |
 | **5 Complex Datatypes** | | |
 | 51 | Complex Types | Read and decode structured/complex data types |
 | **6 Simple Events** | | |
@@ -85,26 +87,57 @@ For a full list of supported features and detailed descriptions, refer to the of
 |---|----------|-------------|
 | **1 Data Access** | | |
 | 11 | Simple Server | Basic OPC UA server with variables |
-| 12 | User Authentication | Username/password and certificate authentication |
+| 12a | User Authentication | Username/password and certificate authentication with roles |
+| 12b | Custom Auth Validator | Custom credential and permission validators (IUaCredentialValidator / IUaPermissionValidator) |
 | 13 | Methods | Expose callable methods in the address space |
-| 14 | Variables and Arrays | Various data types and array variables |
-| 15 | Custom Types | Define and expose custom structured types |
+| 14 | Variables and Arrays | Various data types, properties, callbacks and array variables |
+| 15 | Custom Types | Define and expose custom structured types (Structs) |
 | 16 | Multiple Namespaces | Organize nodes across multiple namespaces |
 | 17 | Dynamic Nodes | Create and remove nodes at runtime |
-| 19 | Advanced Server | Advanced server configuration and features |
+| 19 | Advanced Server | Production-grade server combining all Data Access features |
 | **2 Alarms and Events** | | |
-| 21 | Simple Events | Fire events from the server |
-| 22 | Alarm Conditions | Implement alarm conditions with state management |
+| 21 | Alarm Conditions | Implement alarm conditions with state management |
 | **3 Historical Data** | | |
 | 31 | Historical Access | Store and serve historical data values |
 | 32 | Historical Update | Insert, update, replace and delete history |
 | 33 | Historical Events | Record and serve historical events |
+| 34 | Custom History Store | Implement IHistoryStore for custom storage back-ends |
+| 35 | Custom Event History Store | Implement IEventHistoryStore for custom event storage |
 | **4 NodeSet Import** | | |
 | 41 | NodeSet Import | Import OPC UA NodeSet2 XML files |
 | **5 Logging** | | |
 | 51 | Logging | Configure server-side logging and diagnostics |
-| **6 Reverse Connect** | | |
-| 61 | Reverse Connect | Server-initiated connections through firewalls |
+| **6 Simple Events** | | |
+| 61 | Simple Events | Fire events from the server |
+| **7 Reverse Connect** | | |
+| 71 | Reverse Connect | Server-initiated connections through firewalls |
+
+### Client ↔ Server Pairing
+
+Many client workshops are designed to work with a specific server workshop. Start the server first, then run the matching client:
+
+| Client | Server | Topic |
+|--------|--------|-------|
+| 11 Discover Server | *any server* | Endpoint discovery |
+| 12 Connect Endpoint | 11 Simple Server | Basic connection |
+| 13 Connect with User Auth | 12a User Authentication | Username/password login |
+| 14 Connect with Cert Auth | 12a User Authentication | Certificate login |
+| 15 Browse by NodeId | 11 Simple Server | Browse address space |
+| 16 Browse by Path | 11 Simple Server | Browse by path |
+| 21–22 Read/Write | 11 Simple Server | Data Access |
+| 23 Monitoring Items | 11 Simple Server | Subscriptions |
+| 24 Simple Method Calls | 13 Methods | Method calls |
+| 25 Advanced Calls with Structs | 13 Methods | Nested struct arguments |
+| 26 Read Attributes | 14 Variables and Arrays | Node attributes |
+| 27 Registered Read/Write | 11 Simple Server | Registered nodes |
+| 31–33 Alarm Conditions | 21 Alarm Conditions | Alarms |
+| 41 Historical Data | 31 Historical Access | Read history |
+| 42 Historical Data Update | 32 Historical Update | Write history |
+| 43 Read Historical Events | 33 Historical Events | Event history |
+| 44 Monitoring Historical Events | 33 Historical Events | Event history subscription |
+| 51 Complex Types | 15 Custom Types | Structured data types |
+| 61 Simple Events | 61 Simple Events | Events |
+| 71 Reverse Connect | 71 Reverse Connect | Firewall traversal |
 
 ## Requirements
 

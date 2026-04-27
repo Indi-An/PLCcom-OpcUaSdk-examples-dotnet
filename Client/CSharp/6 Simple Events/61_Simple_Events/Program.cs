@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -72,6 +72,9 @@ class Program
              Console.WriteLine("║    * Create an event subscription with filters               ║");
              Console.WriteLine("║    * Receive and display event notifications                 ║");
              Console.WriteLine("║    * Read event properties (message, severity, source)       ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 61 (Simple Events)         ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -80,7 +83,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -91,7 +94,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -151,9 +154,9 @@ class Program
                                     DiscardOldest = true,
                                     Filter = new EventFilter
                                     {
-                                        // Welche Felder wir geliefert bekommen wollen:
+                                        // Which fields we want delivered:
+                                        // BaseEventType: Message, Severity, Time, SourceName
                                         SelectClauses = new SimpleAttributeOperandCollection {
-                                        // BaseEventType: Message, Severity, Time
                                         new SimpleAttributeOperand() {
                                             TypeDefinitionId = ObjectTypeIds.BaseEventType,
                                             BrowsePath = new QualifiedNameCollection { BrowseNames.Message },
@@ -167,6 +170,11 @@ class Program
                                         new SimpleAttributeOperand() {
                                             TypeDefinitionId = ObjectTypeIds.BaseEventType,
                                             BrowsePath = new QualifiedNameCollection { BrowseNames.Time },
+                                            AttributeId = Attributes.Value
+                                        },
+                                        new SimpleAttributeOperand() {
+                                            TypeDefinitionId = ObjectTypeIds.BaseEventType,
+                                            BrowsePath = new QualifiedNameCollection { BrowseNames.SourceName },
                                             AttributeId = Attributes.Value
                                         }
                                     }
@@ -231,12 +239,13 @@ class Program
         // Events:
         if (e.NotificationValue is EventFieldList ev)
         {
-            // Sequence corresponds to SelectClauses (Message, Severity, Time)
+            // Sequence corresponds to SelectClauses (Message, Severity, Time, SourceName)
             var message = ev.EventFields[0].Value as LocalizedText;
             var severity = ev.EventFields[1].Value is ushort u ? u : (ushort)0;
             var time = ev.EventFields[2].Value is DateTime dt ? dt : DateTime.MinValue;
+            var source = ev.EventFields[3].Value as string ?? "";
 
-            Console.WriteLine($"[{time:O}] Sev={severity} | {message?.Text}");
+            Console.WriteLine($"  [EVENT] {time:HH:mm:ss.fff} UTC  Source={source,-16} Severity={severity,-6} {message?.Text}");
             return;
         }
 
@@ -252,7 +261,7 @@ class Program
 
     private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
     {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
+        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + subscription.ToDisplayString() + " changed to => " + e.Status.ToString());
     }
 
     private void Subscription_PublishStatusChanged(object sender, EventArgs e)
@@ -268,7 +277,7 @@ class Program
         {
             PublishingState currentpublishingState = subscription.PublishingStopped ? PublishingState.STOPPED : PublishingState.RUNNING;
             if (currentpublishingState != publishingState || currentpublishingState == PublishingState.STOPPED)
-                Console.WriteLine(DateTime.Now.ToLocalTime() + "Publishing state of Subscription " + UaClient.SubscriptionToString((Subscription)sender) + " => " + currentpublishingState.ToString());
+                Console.WriteLine(DateTime.Now.ToLocalTime() + "Publishing state of Subscription " + subscription.ToDisplayString() + " => " + currentpublishingState.ToString());
 
             publishingState = currentpublishingState;
         }

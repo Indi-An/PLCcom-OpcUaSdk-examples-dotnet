@@ -54,25 +54,9 @@ Module Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 16 - Multiple Namespaces",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:16",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .ManufacturerName = "My Company GmbH",
-            .ProductName = "My OPC UA Server",
-            .SoftwareVersion = "1.0.0",
-            .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/multiple-namespaces",
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
@@ -104,9 +88,9 @@ Module Program
             Console.WriteLine()
 
             ' Default namespace nodes
-            Dim defaultFolder = server.CreateFolder("DefaultNS")
-            Dim testValue1 = server.CreateVariable(Of Double)(defaultFolder, "TestValue1", initialValue:=42.0)
-            Dim testValue2 = server.CreateVariable(Of String)(defaultFolder, "TestValue2", initialValue:="hello")
+            Dim defaultFolder = server.CreateFolder("DefaultNS", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim testValue1 = server.CreateVariable(Of Double)(defaultFolder, "TestValue1", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=42.0)
+            Dim testValue2 = server.CreateVariable(Of String)(defaultFolder, "TestValue2", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="hello")
             Console.WriteLine("-- Default namespace nodes ----------------------------------------")
             Console.WriteLine($"  {defaultFolder.Path,-40} NodeId={defaultFolder.NodeId}  BrowseName={defaultFolder.BrowseName}")
             Console.WriteLine($"  {testValue1.Path,-40} NodeId={testValue1.NodeId}  BrowseName={testValue1.BrowseName}")
@@ -148,14 +132,14 @@ Module Program
             ' =================================================================
             Console.WriteLine($"-- Plant A (ns={nsPlantA}) ---------------------------------------------")
 
-            Dim plantA = server.CreateFolder("PlantA", ns:=nsPlantA)
+            Dim plantA = server.CreateFolder("PlantA", UaRolePermissions.WITHOUT_RESTRICTIONS, ns:=nsPlantA)
 
-            Dim reactorA = server.CreateObject(plantA, "Reactor", typeDefinitionId:=reactorTypeId)
-            Dim tempA = server.CreateVariable(Of Double)(reactorA, "Temperature", initialValue:=85.0)
-            Dim pressA = server.CreateVariable(Of Double)(reactorA, "Pressure", initialValue:=2.5)
+            Dim reactorA = server.CreateObject(plantA, "Reactor", UaRolePermissions.WITHOUT_RESTRICTIONS, reactorTypeId)
+            Dim tempA = server.CreateVariable(Of Double)(reactorA, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=85.0)
+            Dim pressA = server.CreateVariable(Of Double)(reactorA, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=2.5)
 
-            Dim mixerA = server.CreateObject(plantA, "Mixer", typeDefinitionId:=mixerTypeId)
-            Dim speedA = server.CreateVariable(Of Double)(mixerA, "Speed", initialValue:=120.0)
+            Dim mixerA = server.CreateObject(plantA, "Mixer", UaRolePermissions.WITHOUT_RESTRICTIONS, mixerTypeId)
+            Dim speedA = server.CreateVariable(Of Double)(mixerA, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=120.0)
 
             Console.WriteLine($"  {plantA.Path,-40} NodeId={plantA.NodeId}  BrowseName={plantA.BrowseName}")
             Console.WriteLine($"  {tempA.Path,-40} NodeId={tempA.NodeId}  BrowseName={tempA.BrowseName}")
@@ -168,14 +152,14 @@ Module Program
             ' =================================================================
             Console.WriteLine($"-- Plant B (ns={nsPlantB}) ---------------------------------------------")
 
-            Dim plantB = server.CreateFolder("PlantB", ns:=nsPlantB)
+            Dim plantB = server.CreateFolder("PlantB", UaRolePermissions.WITHOUT_RESTRICTIONS, ns:=nsPlantB)
 
-            Dim reactorB = server.CreateObject(plantB, "Reactor", typeDefinitionId:=reactorTypeId)
-            Dim tempB = server.CreateVariable(Of Double)(reactorB, "Temperature", initialValue:=92.0)
-            Dim pressB = server.CreateVariable(Of Double)(reactorB, "Pressure", initialValue:=3.1)
+            Dim reactorB = server.CreateObject(plantB, "Reactor", UaRolePermissions.WITHOUT_RESTRICTIONS, reactorTypeId)
+            Dim tempB = server.CreateVariable(Of Double)(reactorB, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=92.0)
+            Dim pressB = server.CreateVariable(Of Double)(reactorB, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=3.1)
 
-            Dim mixerB = server.CreateObject(plantB, "Mixer", typeDefinitionId:=mixerTypeId)
-            Dim speedB = server.CreateVariable(Of Double)(mixerB, "Speed", initialValue:=80.0)
+            Dim mixerB = server.CreateObject(plantB, "Mixer", UaRolePermissions.WITHOUT_RESTRICTIONS, mixerTypeId)
+            Dim speedB = server.CreateVariable(Of Double)(mixerB, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=80.0)
 
             Console.WriteLine($"  {plantB.Path,-40} NodeId={plantB.NodeId}  BrowseName={plantB.BrowseName}")
             Console.WriteLine($"  {tempB.Path,-40} NodeId={tempB.NodeId}  BrowseName={tempB.BrowseName}")
@@ -204,6 +188,96 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        ' ── Application Identity ──────────────────────────────────────────────
+        cfg.ApplicationName = "PLCcom Workshop 16 - Multiple Namespaces"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:16"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/multiple-namespaces"
+
+        ' ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+
+        ' ── Endpoints ────────────────────────────────────────────────────────
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+
+        ' ── Security Policies ────────────────────────────────────────────────
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+
+        ' ── User Authentication ───────────────────────────────────────────────
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+
+        ' ── PKI Certificate Store ─────────────────────────────────────────────
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+
+        ' ── Endpoint Host Normalization ───────────────────────────────────────
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None                   = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay = 5
+
+        ' ── VendorServerInfo ──────────────────────────────────────────────────
+        cfg.VendorName = "My Company GmbH"
+        cfg.VendorProductName = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+
+        ' ── OperationLimits ───────────────────────────────────────────────────
+        cfg.MaxNodesPerRead = 1000
+        cfg.MaxNodesPerWrite = 1000
+        cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData           = 100
+        cfg.MaxNodesPerHistoryReadEvents         = 100
+        cfg.MaxNodesPerHistoryUpdateData         = 100
+        cfg.MaxNodesPerHistoryUpdateEvents       = 100
+        cfg.MaxNodesPerMethodCall                = 200
+        cfg.MaxNodesPerRegisterNodes             = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement            = 1000
+        cfg.MaxMonitoredItemsPerCall             = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

@@ -76,6 +76,9 @@ Public Class Program
              Console.WriteLine("║    * Acknowledge an alarm condition                          ║")
              Console.WriteLine("║    * Confirm an alarm condition                              ║")
              Console.WriteLine("║    * Add comments to conditions                              ║")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -83,7 +86,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -93,7 +96,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Interlocked.Increment(counter), counter - 1).ToString() } => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Interlocked.Increment(counter), counter - 1).ToString() } => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -106,8 +109,8 @@ Public Class Program
                     'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'enable auto connect functionality
-                    sessionConfiguration.AutoConnect = True
+                    'disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = False
 
                     'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
@@ -122,7 +125,11 @@ Public Class Program
                     AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                     AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                     AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-                    Console.WriteLine(client.GetSessionState().ToString())
+                    Console.Write("  Connecting ... ")
+                    client.Connect()
+                    Console.WriteLine("OK")
+                    Console.WriteLine()
+
                     Console.WriteLine("Would you like to enter a filter? y/n")
                     Dim filter As EventFilter = Nothing
 
@@ -145,23 +152,19 @@ Public Class Program
                                 Console.WriteLine("Unknown command...")
                                 'create standard eventfilter for monitoring
                                 filter = client.CreateFilter(ObjectTypeIds.ConditionType)
-                                filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType)
                         End Select
                     Else
-                        'create standard eventfilter for monitoring
                         filter = client.CreateFilter(ObjectTypeIds.ConditionType)
-                        filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType)
                     End If
 
-                    Console.WriteLine("Start monitoring.....)")
+                    Console.WriteLine("Start monitoring...")
                     Dim subscription As Subscription = New Subscription()
                     subscription.PublishingInterval = 1000
-                    subscription.PublishingEnabled = False
+                    subscription.PublishingEnabled = True
                     subscription.DisplayName = "mySubsription"
 
                     'register subscription events
                     AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
-                    subscription.PublishingEnabled = False
 
                     'add subscription to client
                     client.AddSubscription(subscription)
@@ -205,16 +208,23 @@ Public Class Program
                     'apply changes
                     subscription.ApplyChanges()
 
-                    'enable publishing mode of subscription and set PublishingInterval
-                    subscription.SetPublishingMode(True)
-                    subscription.Modify()
                     client.Refresh_Conditions(subscription)
-                    Console.WriteLine("Start monitoring.....)")
+                    Console.WriteLine("Start monitoring...")
                     Dim command As String = String.Empty
 
                     Do
                         Console.WriteLine()
-                        Dim commandList As String = $"List of commands: { Microsoft.VisualBasic.Constants.vbCrLf }1 - List all alarms { Microsoft.VisualBasic.Constants.vbCrLf }2 - Refresh active alarms { Microsoft.VisualBasic.Constants.vbCrLf }3 - Enable alarm { Microsoft.VisualBasic.Constants.vbCrLf }4 - Disable alarm { Microsoft.VisualBasic.Constants.vbCrLf }5 - Acknowledge alarm { Microsoft.VisualBasic.Constants.vbCrLf }6 - Add comment { Microsoft.VisualBasic.Constants.vbCrLf }7 - Confirm alarm { Microsoft.VisualBasic.Constants.vbCrLf }8 - Shelve alarm { Microsoft.VisualBasic.Constants.vbCrLf }9 - Respond { Microsoft.VisualBasic.Constants.vbCrLf }0 - Close the application { Microsoft.VisualBasic.Constants.vbCrLf}"
+                        Dim commandList As String = "List of commands:" & vbCrLf &
+                                "1 - List all alarms" & vbCrLf &
+                                "2 - Refresh active alarms" & vbCrLf &
+                                "3 - Enable alarm" & vbCrLf &
+                                "4 - Disable alarm" & vbCrLf &
+                                "5 - Acknowledge alarm" & vbCrLf &
+                                "6 - Add comment" & vbCrLf &
+                                "7 - Confirm alarm" & vbCrLf &
+                                "8 - Shelve alarm" & vbCrLf &
+                                "9 - Respond" & vbCrLf &
+                                "0 - Close the application"
                         Console.WriteLine(commandList)
                         Console.WriteLine($"Enter Commands:{ Microsoft.VisualBasic.Constants.vbLf}")
                         command = Console.ReadLine()
@@ -291,10 +301,10 @@ Public Class Program
                                 Select Case SubCommand.ToLower()
                                     Case "on"
                                         Console.WriteLine("on => Online..")
-                                        Respond(AlarmNumber, True)
+                                        Respond(AlarmNumber, 0)
                                     Case "off"
                                         Console.WriteLine("off => Offline..")
-                                        Respond(AlarmNumber, False)
+                                        Respond(AlarmNumber, 1)
                                     Case "exit"
                                         Console.WriteLine("exit => Abort shelving..")
                                     Case Else
@@ -386,7 +396,7 @@ Public Class Program
     End Sub
 
     Private Sub Subscription_StateChanged(ByVal subscription As Subscription, ByVal e As SubscriptionStateChangedEventArgs)
-        Console.WriteLine($"{Date.Now.ToLocalTime() } State of Subscription { UaClient.SubscriptionToString(subscription) } changed to => { e.Status.ToString()}")
+        Console.WriteLine($"{Date.Now.ToLocalTime() } State of Subscription { subscription.ToDisplayString() } changed to => { e.Status.ToString()}")
     End Sub
 
     Private Sub Client_MonitorNotification(ByVal monitoredItem As MonitoredItem, ByVal e As MonitoredItemNotificationEventArgs)
@@ -406,15 +416,17 @@ Public Class Program
                 ae.AlarmEventItems.Add(filtername, aei)
             Next
 
-            Dim Identifier As String = $"NodeID:{condition.NodeId.ToString() } BrancheID:{ If(condition.BranchId IsNot Nothing, condition.BranchId.Value.ToString(), "")}"
+            Dim Identifier As String = $"NodeID:{condition.NodeId} BrancheID:{If(condition.BranchId?.Value IsNot Nothing, condition.BranchId.Value.ToString(), "")}"
 
-
-            'Update Alarm cache
-            If mAlarmEventCache.ContainsKey(Identifier) Then
-                mAlarmEventCache(Identifier) = ae
-            Else
-                mAlarmEventCache.Add(Identifier, ae)
-            End If
+            ' Retain=false means alarm resolved - remove from cache
+            Dim retain As Boolean = If(condition.Retain?.Value, False)
+            SyncLock mAlarmEventCache
+                If retain Then
+                    mAlarmEventCache(Identifier) = ae
+                Else
+                    mAlarmEventCache.Remove(Identifier)
+                End If
+            End SyncLock
 
         Catch exception As Exception
             Console.WriteLine(exception.Message)
@@ -432,14 +444,14 @@ Public Class Program
             For Each alarmEvent As AlarmEvent In GetEventCache(True)
                 sb.Append($"{Math.Min(Interlocked.Increment(counter), counter - 1).ToString()} ")
                 Dim condition As ConditionState = alarmEvent.GetConditionState()
-                sb.Append($"Source={condition.SourceName.Value} ")
-                sb.Append($"Condition={condition.ConditionName.Value} ")
-                If condition.BranchId IsNot Nothing Then sb.Append("Branch={condition.BranchId.Value} ")
-                sb.Append($"Severity={condition.Severity.Value} ")
-                sb.Append($"Time={condition.Time.Value.ToLocalTime()} ")
-                sb.Append($"State={condition.EnabledState.EffectiveDisplayName.Value} ")
-                sb.Append($"Message={condition.Message.Value} ")
-                sb.Append($"Comment={condition.Comment.Value} ")
+                sb.Append($"Source={condition.SourceName?.Value} ")
+                sb.Append($"Condition={condition.ConditionName?.Value} ")
+                If condition.BranchId IsNot Nothing Then sb.Append($"Branch={condition.BranchId.Value} ")
+                sb.Append($"Severity={condition.Severity?.Value} ")
+                sb.Append($"Time={condition.Time?.Value.ToLocalTime()} ")
+                sb.Append($"State={condition.EnabledState?.EffectiveDisplayName?.Value} ")
+                sb.Append($"Message={condition.Message?.Value} ")
+                sb.Append($"Retain={condition.Retain?.Value} ")
                 sb.Append(Environment.NewLine)
             Next
 
@@ -453,7 +465,7 @@ Public Class Program
     Private Sub Acknowledge(ByVal AlarmNumber As UInteger, ByVal comment As String)
         Try
 
-            If AlarmNumber > mEventFilterMappings.Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
@@ -468,7 +480,7 @@ Public Class Program
     Private Sub EnableDisableCondition(ByVal AlarmNumber As UInteger, ByVal enable As Boolean)
         Try
 
-            If AlarmNumber > GetEventCache(False).Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
@@ -483,7 +495,7 @@ Public Class Program
     Private Sub AddComment(ByVal AlarmNumber As UInteger, ByVal comment As String)
         Try
 
-            If AlarmNumber > GetEventCache(False).Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
@@ -498,7 +510,7 @@ Public Class Program
     Private Sub Confirm(ByVal AlarmNumber As UInteger, ByVal comment As String)
         Try
 
-            If AlarmNumber > GetEventCache(False).Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
@@ -513,7 +525,7 @@ Public Class Program
     Private Sub Shelve(ByVal AlarmNumber As UInteger, ByVal shelvingMethod As AlarmEvent.ShelvingMethod, ByVal shelvingTime As Double)
         Try
 
-            If AlarmNumber > GetEventCache(False).Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
@@ -525,15 +537,15 @@ Public Class Program
         End Try
     End Sub
 
-    Private Sub Respond(ByVal AlarmNumber As UInteger, ByVal OnlineState As Boolean)
+    Private Sub Respond(ByVal AlarmNumber As UInteger, ByVal responseIndex As Integer)
         Try
 
-            If AlarmNumber > GetEventCache(False).Count Then
+            If AlarmNumber >= CUInt(GetEventCache(False).Count) Then
                 Console.WriteLine($"AlarmNumber { AlarmNumber.ToString() } is out of range")
             End If
 
             Dim alarmEvent As AlarmEvent = GetEventCache(False).ToArray()(CInt(AlarmNumber))
-            alarmEvent.Respond(OnlineState)
+            alarmEvent.Respond(responseIndex)
             Console.WriteLine("method successfully")
         Catch ex As Exception
             Console.WriteLine(ex)

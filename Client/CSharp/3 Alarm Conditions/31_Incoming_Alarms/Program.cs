@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -75,6 +75,9 @@ class Program
              Console.WriteLine("║    * Subscribe to alarm events                               ║");
              Console.WriteLine("║    * Receive and display incoming alarms                     ║");
              Console.WriteLine("║    * Read alarm properties (severity, message, source)       ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -83,7 +86,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -94,7 +97,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -108,8 +111,8 @@ class Program
                     SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                                                                                           Endpoints[iNumberOfEndpoint]);
 
-                    //enable auto connect functionality
-                    sessionConfiguration.AutoConnect = true;
+                    //disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = false;
 
                     //output certificate store path
                     Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
@@ -126,7 +129,10 @@ class Program
                     client.KeepAlive += Client_KeepAlive;
                     client.CertificateValidation += client_CertificateValidation;
 
-                    Console.WriteLine(client.GetSessionState().ToString());
+                    Console.Write("  Connecting ... ");
+                    client.Connect();
+                    Console.WriteLine("OK");
+                    Console.WriteLine($"  Session state: {client.GetSessionState()}");
                     Console.WriteLine();
 
                     try
@@ -139,13 +145,12 @@ class Program
                         {
                             Console.WriteLine("Please enter filter level... \r\n" +
                                                          "List of commands: \r\n" +
-                                                         "1    - All \r\n" +
+                                                         "1    - All conditions \r\n" +
                                                          "2    - Dialogs \r\n" +
                                                          "3    - Alarms \r\n" +
                                                          "4    - Limit alarms \r\n" +
                                                          "5    - Discrete alarms\r\n");
 
-                            //create eventfilter for monitoring
                             switch (Console.ReadLine().ToLower())
                             {
                                 case "1":
@@ -164,31 +169,24 @@ class Program
                                     filter = client.CreateFilter(ObjectTypeIds.DiscreteAlarmType);
                                     break;
                                 default:
-                                    Console.WriteLine("Unknown command...");
-                                    //create standard eventfilter for monitoring
                                     filter = client.CreateFilter(ObjectTypeIds.ConditionType);
-                                    filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType);
                                     break;
                             }
-
                         }
                         else
                         {
-                            //create standard eventfilter for monitoring
                             filter = client.CreateFilter(ObjectTypeIds.ConditionType);
-                            filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType);
                         }
 
-                        Console.WriteLine("Start monitoring.....)");
+                        Console.WriteLine("Start monitoring...");
 
                         Subscription subscription = new Subscription();
                         subscription.PublishingInterval = 1000;
-                        subscription.PublishingEnabled = false;
+                        subscription.PublishingEnabled = true;
                         subscription.DisplayName = "mySubsription";
 
                         //register subscription events
                         subscription.StateChanged += Subscription_StateChanged;
-                        subscription.PublishingEnabled = false;
 
                         //add subscription to client
                         client.AddSubscription(subscription);
@@ -231,10 +229,7 @@ class Program
                         //apply changes
                         subscription.ApplyChanges();
 
-                        //enable publishing mode of subscription and set PublishingInterval
-                        subscription.SetPublishingMode(true);
-                        subscription.Modify();
-
+                        //refresh conditions to get current alarm states
                         client.Refresh_Conditions(subscription);
                     }
                     catch (Exception ex)
@@ -312,7 +307,7 @@ class Program
 
     private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
     {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
+        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + subscription.ToDisplayString() + " changed to => " + e.Status.ToString());
     }
 
     private void Client_MonitorNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
@@ -332,19 +327,23 @@ class Program
                 eventTypeId == ObjectTypeIds.RefreshEndEventType) return;
 
 
-            //show actual event alarm data in debug window
+            // Use GetConditionState to decode the alarm fields into a typed object.
+            // This is the recommended way to read alarm properties.
+            ConditionState condition = client.GetConditionState(monitoredItem, notification);
+            if (condition == null) return;
+
+            // Retain=true:  alarm is active or unacknowledged (needs attention)
+            // Retain=false: alarm is resolved (returned to normal and acknowledged)
+            bool isActive = condition.Retain?.Value ?? false;
+            string status = isActive ? "ALARM ON " : "ALARM OFF";
+
             StringBuilder sb = new StringBuilder();
-            sb.Append("new notification received:");
-            sb.Append(Environment.NewLine);
-            for (int i = 0; i < notification.EventFields.Count; i++)
-            {
-                if (notification.EventFields[i].Value != null)
-                {
-                    sb.Append(String.Format(" " + GetEventFilterMappings((EventFilter)monitoredItem.Filter)[i] + " {0}", notification.EventFields[i].Value.ToString()));
-                    sb.Append(Environment.NewLine);
-                }
-            }
-            sb.Append(Environment.NewLine);
+            sb.AppendLine($"[{status}] {DateTime.Now.ToLocalTime():HH:mm:ss}");
+            sb.AppendLine($"  Source   : {condition.SourceName?.Value}");
+            sb.AppendLine($"  Alarm    : {condition.ConditionName?.Value}");
+            sb.AppendLine($"  Message  : {condition.Message?.Value}");
+            sb.AppendLine($"  Severity : {condition.Severity?.Value}");
+            sb.AppendLine($"  Retain   : {condition.Retain?.Value}  (true=active/unacked, false=resolved)");
 
             Console.WriteLine(sb.ToString());
 

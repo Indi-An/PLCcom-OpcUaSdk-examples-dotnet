@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -65,6 +65,9 @@ Public Class Program
         Console.WriteLine("║    * Set username/password on SessionConfiguration           ║")
         Console.WriteLine("║    * UserIdentity is sent during ActivateSession             ║")
         Console.WriteLine("║    * Handle authentication failures                          ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  Required server: Server Workshop 12 (User Authentication)   ║")
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
@@ -81,7 +84,7 @@ Public Class Program
             Console.WriteLine("  Discovering endpoints...")
             Console.WriteLine()
 
-            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), 60000)
+            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), certificateValidator:=AddressOf CertificateValidationHandler)
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints)
 
             If endpoints.Count = 0 Then
@@ -93,7 +96,7 @@ Public Class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
             Console.WriteLine()
             For i As Integer = 0 To endpoints.Count - 1
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints(i))}")
+                Console.WriteLine($"  [{i}] {endpoints(i).ToDisplayString()}")
             Next
 
             Console.WriteLine()
@@ -112,8 +115,23 @@ Public Class Program
             sessionConfig.AutoConnect = False
 
             ' Set username/password authentication.
-            ' TODO: Replace with valid credentials for your server
-            sessionConfig.Identity = New UserIdentity("<username>", "<password>")
+            ' The UserIdentity is sent to the server during the ActivateSession call.
+            ' The server validates the credentials and assigns a role to the session.
+            '
+            ' Server Workshop 12 defines three users:
+            '   viewer   / viewer123   -> Role.Observer  (read-only)
+            '   operator / operator123 -> Role.Operator  (read + write)
+            '   admin    / admin123    -> Role.Engineer  (full access)
+            '
+            ' The role only has effect if the server has set RolePermissions on its
+            ' nodes via SetRolePermissions(). Server Workshop 12 does this - try
+            ' connecting as viewer and writing a value to see BadUserAccessDenied.
+            Console.Write("  Username: ")
+            Dim username As String = Console.ReadLine()
+            Console.Write("  Password: ")
+            Dim password As String = ReadPassword()
+            Console.WriteLine()
+            sessionConfig.Identity = New UserIdentity(username, password)
 
             Console.WriteLine()
             Console.WriteLine("  Certificate store: " & sessionConfig.CertificateStorePath)
@@ -131,9 +149,7 @@ Public Class Program
             End Sub
             AddHandler client.KeepAlive, Sub(session, e)
             End Sub
-            AddHandler client.CertificateValidation, Sub(sender, e)
-                e.Accept = True
-            End Sub
+            AddHandler client.CertificateValidation, AddressOf CertificateValidationHandler
 
             ' -- Step 4: Connect --------------------------------------------------
             Console.Write("  Connecting with user credentials ... ")
@@ -142,7 +158,36 @@ Public Class Program
             Console.WriteLine($"  Session state: {client.GetSessionState()}")
             Console.WriteLine()
 
-            ' -- Step 5: Disconnect -----------------------------------------------
+            ' -- Step 5: Test role-based access -----------------------------------
+            ' Read Temperature - allowed for all roles (Observer, Operator, Engineer)
+            Dim temperatureId As NodeId = client.GetNodeIdByPath("Objects.Plant.Temperature")
+            Dim value As Object = client.ReadValue(temperatureId)
+            Console.WriteLine($"  Read  Temperature = {value}  -> OK")
+
+            ' Write Temperature - allowed for Operator and Engineer, rejected for Observer
+            ' Observer gets BadUserAccessDenied because SetRolePermissions() on the server
+            ' only grants Write to Operator and Engineer.
+            Dim writeResult As StatusCode = client.WriteValue(temperatureId, 99.9)
+            If StatusCode.IsGood(writeResult) Then
+                Console.WriteLine($"  Write Temperature = 99.9   -> OK (role allows write)")
+            Else
+                Console.WriteLine($"  Write Temperature = 99.9   -> {writeResult} (role does not allow write)")
+            End If
+            Console.WriteLine()
+
+            ' -- Step 6: Test method call -----------------------------------------
+            ' Call Reset - allowed for Operator and Engineer, rejected for Observer
+            Dim resetId As NodeId = client.GetNodeIdByPath("Objects.Plant.Reset")
+            Dim plantId As NodeId = client.GetNodeIdByPath("Objects.Plant")
+            Try
+                client.Call(plantId, resetId)
+                Console.WriteLine($"  Call   Reset              -> OK (role allows call)")
+            Catch ex As Exception
+                Console.WriteLine($"  Call   Reset              -> {ex.Message} (role does not allow call)")
+            End Try
+            Console.WriteLine()
+
+            ' -- Step 7: Disconnect -----------------------------------------------
             Console.WriteLine("  Press ENTER to disconnect and exit.")
             Console.ReadLine()
 
@@ -161,4 +206,28 @@ Public Class Program
 
     End Sub
 
+    Private Sub CertificateValidationHandler(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
+        ' Called when the server presents its certificate - both during opc.https
+        ' discovery (TLS) and when a security policy other than None is used.
+        ' Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = True
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}")
+    End Sub
+
+    Private Shared Function ReadPassword() As String
+        Dim password As New System.Text.StringBuilder()
+        Dim key As ConsoleKeyInfo
+        Do
+            key = Console.ReadKey(intercept:=True)
+            If key.Key = ConsoleKey.Backspace AndAlso password.Length > 0 Then
+                password.Remove(password.Length - 1, 1)
+                Console.Write(Chr(8) & " " & Chr(8))
+            ElseIf key.Key <> ConsoleKey.Enter AndAlso key.Key <> ConsoleKey.Backspace Then
+                password.Append(key.KeyChar)
+                Console.Write("*")
+            End If
+        Loop While key.Key <> ConsoleKey.Enter
+        Console.WriteLine()
+        Return password.ToString()
+    End Function
 End Class

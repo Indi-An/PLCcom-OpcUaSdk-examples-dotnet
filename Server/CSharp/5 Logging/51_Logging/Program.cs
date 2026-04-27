@@ -27,6 +27,7 @@
 // logging framework (NLog, Serilog, Microsoft.Extensions.Logging, etc.)
 //
 // Log levels (from least to most verbose):
+//   None    -> logging disabled, no messages generated
 //   Error   -> only errors that affect functionality
 //   Warning -> errors + warnings (recommended for production)
 //   Info    -> errors + warnings + service calls (connect, read, write, subscribe)
@@ -63,29 +64,14 @@ Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 51: Logging         
 Console.WriteLine("║                                                              ║");
 Console.WriteLine("║  This example demonstrates:                                  ║");
 Console.WriteLine("║  * Subscribing to SDK log messages                           ║");
-Console.WriteLine("║  * Setting log verbosity (Error, Warning, Info, Debug)       ║");
+Console.WriteLine("║  * Setting log verbosity (None, Error, Warning, Info, Debug) ║");
 Console.WriteLine("║  * Filtering log messages by level                           ║");
 Console.WriteLine("║  * Routing logs to your own framework                        ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.WriteLine();
 
-var config = new UaServerConfiguration
-{
-    ApplicationName = "PLCcom Workshop 51 - Logging",
-    ApplicationUri  = "urn:localhost:PLCcom:Workshop:51",
-    ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    CertificateStorePath = @".\pki"
-};
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (s, e) => e.Accept = true;
@@ -118,11 +104,12 @@ server.LogMessage += (sender, e) =>
 // Call this before Start() to capture startup messages at the desired level.
 // Changing the level at runtime is also supported.
 //
+//   None    -> logging disabled (no messages at all)
 //   Error   -> only errors (minimal output, good for production)
 //   Warning -> errors + warnings
 //   Info    -> errors + warnings + service calls (good for development)
 //   Debug   -> everything (very verbose, use only for troubleshooting)
-server.SetLogLevel(UaLogLevel.Info);
+server.SetLogLevel(UaLogLevel.None);
 
 Console.WriteLine("  Log level set to: Info");
 Console.WriteLine("  (connect a client to see log messages appear here)");
@@ -134,8 +121,8 @@ catch (Exception ex) { Console.WriteLine("FAILED"); Console.WriteLine(ex.Message
 Console.WriteLine("OK");
 Console.WriteLine();
 
-var plant = server.CreateFolder("Plant");
-server.CreateVariable<double>(plant, "Temperature", initialValue: 22.0);
+var plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS);
+server.CreateVariable<double>(plant, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 22.0);
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  Server is running with logging enabled.                     ║");
@@ -151,3 +138,106 @@ Console.WriteLine("║                                                          
 Console.WriteLine("║  Press ENTER to exit.                                        ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ReadLine();
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 51 - Logging",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:51",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/logging",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+        // ── Endpoints ──────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // ── Endpoint Host Normalization ───────────────────────────────────────
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None                   = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("-- Active Server Configuration ------------------------------");
+    Console.WriteLine("  ApplicationName  : " + config.ApplicationName);
+    Console.WriteLine("  ApplicationUri   : " + config.ApplicationUri);
+    Console.WriteLine("  NamespaceUri     : " + (config.NamespaceUri ?? "(default)"));
+    Console.WriteLine("  ManufacturerName : " + (config.ManufacturerName ?? "(not set)"));
+    Console.WriteLine("  ProductName      : " + (config.ProductName ?? "(not set)"));
+    Console.WriteLine("  SoftwareVersion  : " + (config.SoftwareVersion ?? "(auto-detect)"));
+    Console.WriteLine("  BuildNumber      : " + (config.BuildNumber ?? "(auto-detect)"));
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine("    " + addr);
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine("    VendorName=" + (config.VendorName ?? "(not set)") +
+                      "  ProductName=" + (config.VendorProductName ?? "(not set)") +
+                      "  Version=" + (config.VendorProductVersion ?? "(not set)"));
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine("    Read=" + config.MaxNodesPerRead + "  Write=" + config.MaxNodesPerWrite +
+                      "  Browse=" + config.MaxNodesPerBrowse + "  Method=" + config.MaxNodesPerMethodCall);
+    Console.WriteLine("    HistRD=" + config.MaxNodesPerHistoryReadData + "  HistRE=" + config.MaxNodesPerHistoryReadEvents +
+                      "  HistUD=" + config.MaxNodesPerHistoryUpdateData + "  HistUE=" + config.MaxNodesPerHistoryUpdateEvents);
+    Console.WriteLine("    Register=" + config.MaxNodesPerRegisterNodes +
+                      "  Translate=" + config.MaxNodesPerTranslateBrowsePathsToNodeIds +
+                      "  NodeMgmt=" + config.MaxNodesPerNodeManagement +
+                      "  MonItems=" + config.MaxMonitoredItemsPerCall);
+    Console.WriteLine("-------------------------------------------------------------");
+    Console.WriteLine();
+}

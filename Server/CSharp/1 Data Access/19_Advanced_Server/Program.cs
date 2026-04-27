@@ -103,31 +103,10 @@ Console.WriteLine();
 // =============================================================================
 // Step 1: Configuration
 // =============================================================================
-var config = new UaServerConfiguration
-{
-    ApplicationName  = "PLCcom Workshop 19 - Advanced Server",
-    ApplicationUri   = "urn:localhost:PLCcom:Workshop:19",
-    ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-
-    // Allow anonymous connections - authentication is covered in Workshop 12
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "CNC Factory Server",
-    SoftwareVersion  = "2.0.0",
-    BuildNumber      = "100",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/advanced-server",
-    CertificateStorePath = @".\pki"
-};
+// All server settings are defined in CreateConfig() below.
+// See that function for a full description of every available option.
+var config = CreateConfig();
+PrintConfig(config);
 
 // =============================================================================
 // Step 2: Create server and configure users
@@ -194,38 +173,38 @@ Console.WriteLine();
 // =============================================================================
 Console.WriteLine("-- Building address space ----------------------------------------");
 
-var factory = server.CreateFolder("Factory");
+var factory = server.CreateFolder("Factory", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
 // --- Helper: create a CNC machine instance ---
 UaVariable<double>[] CreateMachine(
     UaFolder parent, string name, string serial,
     double initialSpeed, double initialTemp)
 {
-    var machine = server.CreateObject(parent, name, typeDefinitionId: machineTypeId);
+    var machine = server.CreateObject(parent, name, UaRolePermissions.WITHOUT_RESTRICTIONS, machineTypeId);
 
     // Motor sub-object with properties
-    var motor = server.CreateObject(machine.NodeId, "MainMotor", typeDefinitionId: motorTypeId);
+    var motor = server.CreateObject(machine.NodeId, "MainMotor", UaRolePermissions.WITHOUT_RESTRICTIONS, motorTypeId);
 
     var speed = server.CreateVariable<double>(motor, "Speed",
-        initialValue: initialSpeed, readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: initialSpeed, readOnly: true);
     speed.SetEURange(0, 6000);
     speed.SetEngineeringUnits("rpm", "Revolutions per minute");
 
     var temp = server.CreateVariable<double>(motor, "Temperature",
-        initialValue: initialTemp, readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: initialTemp, readOnly: true);
     temp.SetEURange(0, 150);
     temp.SetEngineeringUnits("degC", "Degrees Celsius");
 
     var running = server.CreateVariable<bool>(motor, "Running",
-        initialValue: true, readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: true, readOnly: true);
 
     // Machine-level variables
     var state = server.CreateVariable<string>(machine, "State",
-        initialValue: "Running", readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "Running", readOnly: true);
     var cycles = server.CreateVariable<long>(machine, "CycleCount",
-        initialValue: 0L, readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 0L, readOnly: true);
     server.CreateVariable<string>(machine, "SerialNumber",
-        initialValue: serial, readOnly: true);
+        UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: serial, readOnly: true);
 
     // Writable setpoints array with exposed elements
     var setpoints = server.CreateArrayVariable<double>(machine.NodeId, "Setpoints",
@@ -245,7 +224,7 @@ UaVariable<double>[] CreateMachine(
             capturedRunning.Value = false;
             Console.WriteLine($"  !! {capturedName} RESET by client");
             return ServiceResult.Good;
-        });
+        }, UaRolePermissions.WITHOUT_RESTRICTIONS);
 
     Console.WriteLine($"  {machine.Path}");
     Console.WriteLine($"    Motor: Speed={speed.Value} rpm, Temp={temp.Value} degC");
@@ -259,7 +238,7 @@ var machine2Vars = CreateMachine(factory, "CNC_Machine_02", "SN-2025-002", 1800.
 Console.WriteLine();
 
 // --- Factory status struct ---
-var factoryStatus = server.CreateStructVariable(factory, "FactoryStatus", factoryStatusTypeId);
+var factoryStatus = server.CreateStructVariable(factory, "FactoryStatus", factoryStatusTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
 factoryStatus.SetField<string>("PlantName",      "MainFactory");
 factoryStatus.SetField<int>   ("MachinesOnline", 2);
 factoryStatus.SetField<long>  ("TotalCycles",    0L);
@@ -268,13 +247,13 @@ Console.WriteLine($"  {factoryStatus.Path}");
 Console.WriteLine($"    PlantName=MainFactory, MachinesOnline=2");
 
 // --- Environment data ---
-var envFolder = server.CreateFolder(factory, "EnvironmentData");
+var envFolder = server.CreateFolder(factory, "EnvironmentData", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-var ambientTemp = server.CreateVariable<double>(envFolder, "AmbientTemp", initialValue: 21.5);
+var ambientTemp = server.CreateVariable<double>(envFolder, "AmbientTemp", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 21.5);
 ambientTemp.SetEURange(0, 50);
 ambientTemp.SetEngineeringUnits("degC", "Degrees Celsius");
 
-var humidity = server.CreateVariable<double>(envFolder, "Humidity", initialValue: 45.0);
+var humidity = server.CreateVariable<double>(envFolder, "Humidity", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 45.0);
 humidity.SetEURange(0, 100);
 humidity.SetEngineeringUnits("%", "Percent relative humidity");
 
@@ -291,9 +270,9 @@ Console.WriteLine();
 // =============================================================================
 Console.WriteLine("-- Writable parameters with validation ---------------------------");
 
-var paramFolder = server.CreateFolder("Parameters");
+var paramFolder = server.CreateFolder("Parameters", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-var maxSpeed = server.CreateVariable<double>(paramFolder, "MaxSpeed", initialValue: 3000.0);
+var maxSpeed = server.CreateVariable<double>(paramFolder, "MaxSpeed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 3000.0);
 maxSpeed.SetEURange(0, 6000);
 maxSpeed.SetEngineeringUnits("rpm", "Revolutions per minute");
 maxSpeed.OnWrite = (newValue) =>
@@ -307,7 +286,7 @@ maxSpeed.OnWrite = (newValue) =>
     return true;
 };
 
-var emergencyStop = server.CreateVariable<bool>(paramFolder, "EmergencyStop", initialValue: false);
+var emergencyStop = server.CreateVariable<bool>(paramFolder, "EmergencyStop", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: false);
 emergencyStop.OnWrite = (newValue) =>
 {
     if (newValue)
@@ -317,7 +296,7 @@ emergencyStop.OnWrite = (newValue) =>
     return true;
 };
 
-var batchSize = server.CreateVariable<int>(paramFolder, "BatchSize", initialValue: 100);
+var batchSize = server.CreateVariable<int>(paramFolder, "BatchSize", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 100);
 batchSize.OnWrite = (newValue) =>
 {
     if (newValue < 1 || newValue > 1000)
@@ -330,7 +309,7 @@ batchSize.OnWrite = (newValue) =>
 
 // Computed value: reads MaxSpeed and converts to m/s (assuming 0.1m radius)
 var maxLinearSpeed = server.CreateVariable<double>(paramFolder, "MaxLinearSpeed",
-    initialValue: 0.0, readOnly: true);
+    UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 0.0, readOnly: true);
 maxLinearSpeed.SetEngineeringUnits("m/s", "Meters per second");
 maxLinearSpeed.OnRead = (current) =>
     Math.Round(maxSpeed.Value * 2.0 * Math.PI * 0.1 / 60.0, 3);
@@ -426,4 +405,100 @@ while (true)
                   $"M2: {machine2Vars[0].Value,7:F1}rpm {machine2Vars[1].Value,5:F1}C  " +
                   $"Cycles={displayCycles,-8} {(eStop ? "E-STOP!" : "       ")}");
     Thread.Sleep(1000);
+}
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 19 - Advanced Server",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:19",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/advanced-server",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "CNC Factory Server",
+        SoftwareVersion  = "2.0.0",
+        BuildNumber      = "100",
+        // ── Endpoints ──────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // ── Endpoint Host Normalization ───────────────────────────────────────
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None                   = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "CNC Factory Server",
+        VendorProductVersion = "2.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine($"    VendorName={config.VendorName ?? "(not set)"}  ProductName={config.VendorProductName ?? "(not set)"}  Version={config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine($"    Read={config.MaxNodesPerRead}  Write={config.MaxNodesPerWrite}  Browse={config.MaxNodesPerBrowse}  Method={config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    HistRD={config.MaxNodesPerHistoryReadData}  HistRE={config.MaxNodesPerHistoryReadEvents}  HistUD={config.MaxNodesPerHistoryUpdateData}  HistUE={config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    Register={config.MaxNodesPerRegisterNodes}  Translate={config.MaxNodesPerTranslateBrowsePathsToNodeIds}  NodeMgmt={config.MaxNodesPerNodeManagement}  MonItems={config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
 }

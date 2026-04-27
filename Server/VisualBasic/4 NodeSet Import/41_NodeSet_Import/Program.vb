@@ -69,20 +69,9 @@ Module Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 41 - NodeSet Import",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:41",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
@@ -146,6 +135,96 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        ' ── Application Identity ──────────────────────────────────────────────
+        cfg.ApplicationName = "PLCcom Workshop 41 - NodeSet Import"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:41"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/nodeset-import"
+
+        ' ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+
+        ' ── Endpoints ────────────────────────────────────────────────────────
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+
+        ' ── Security Policies ────────────────────────────────────────────────
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+
+        ' ── User Authentication ───────────────────────────────────────────────
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+
+        ' ── PKI Certificate Store ─────────────────────────────────────────────
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+
+        ' ── Endpoint Host Normalization ───────────────────────────────────────
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None                   = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay   = 5
+
+        ' ── VendorServerInfo ──────────────────────────────────────────────────
+        cfg.VendorName           = "My Company GmbH"
+        cfg.VendorProductName    = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+
+        ' ── OperationLimits ───────────────────────────────────────────────────
+        cfg.MaxNodesPerRead                      = 1000
+        cfg.MaxNodesPerWrite                     = 1000
+        cfg.MaxNodesPerBrowse                    = 1000
+        cfg.MaxNodesPerHistoryReadData           = 100
+        cfg.MaxNodesPerHistoryReadEvents         = 100
+        cfg.MaxNodesPerHistoryUpdateData         = 100
+        cfg.MaxNodesPerHistoryUpdateEvents       = 100
+        cfg.MaxNodesPerMethodCall                = 200
+        cfg.MaxNodesPerRegisterNodes             = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement            = 1000
+        cfg.MaxMonitoredItemsPerCall             = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+        Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

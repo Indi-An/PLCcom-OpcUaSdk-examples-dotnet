@@ -33,7 +33,8 @@
 '   * How to encode arrays of structures
 '   * How to call methods with complex structured arguments
 '
-' Target server: opc.tcp://localhost:48410
+' Required server: Server Workshop 13 (Methods)
+' Target server:   opc.tcp://localhost:48410
 ' ==============================================================================
 
 Imports PLCcom.Opc.Ua
@@ -57,7 +58,6 @@ Public Class Program
 
          Console.WriteLine()
 
-
              Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
              Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 25: Advanced Calls      ║")
              Console.WriteLine("║                                                              ║")
@@ -69,6 +69,9 @@ Public Class Program
              Console.WriteLine("║    * Encode nested structures with BinaryEncoder             ║")
              Console.WriteLine("║    * Embed ExtensionObjects inside other structures          ║")
              Console.WriteLine("║    * Encode arrays of structures                             ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  Required server: Server Workshop 13 (Methods)               ║")
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -76,7 +79,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -86,7 +89,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -104,7 +107,6 @@ Public Class Program
                     'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-
                     'Create a new opc client instance and pass your license information
                     Using client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                         Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
@@ -117,7 +119,6 @@ Public Class Program
                         AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                         AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
 
-
                         ' 
                         ' let´s starting a method call, step by step
                         ' In this case, we pass a structure named as 'DataStructure_One" constructed as follows:
@@ -125,7 +126,7 @@ Public Class Program
                         ' structure DataStructure_One = 
                         ' {
                         '   int myIntValue1,
-                        '     string myStringValue2,
+                        '   string myStringValue2,
                         '   DataStructure_two DataStructure_two,
                         '   int myIntValue3,
                         '   DataStructure_two[] DataStructure_twoArray
@@ -141,10 +142,9 @@ Public Class Program
                         '   int myIntValue12
                         ' }
                         ' 
-                        ' Object to which the method should be applied is named as "myObjectNode"
-                        ' Method is named as "myMethodNode"
+                        ' Object: "myObjectNode_Advanced"
+                        ' Method: "myMethodNode"
                         ' 
-
 
                         'create Encoder instances
                         Dim encoderDataStructure_One As BinaryEncoder = New BinaryEncoder(client.GetMessageContext())
@@ -183,33 +183,19 @@ Public Class Program
 #Region "create and add embedded structure Array "
 
                         'create a Array of DataStructure_Two objects with three objects
-
                         Dim dataStructure_TwoCollection As ExtensionObjectCollection = New ExtensionObjectCollection()
 
                         For i As Integer = 0 To 3 - 1
-                            'create encoderDataStructure_Two instance
                             encoderDataStructure_Two = New BinaryEncoder(client.GetMessageContext())
-
-                            'put objects to encoderDataStructure_Two with given order
                             encoderDataStructure_Two.WriteInt32("", 555) 'myIntValue10
                             encoderDataStructure_Two.WriteString("", "test_stringArray365") 'myStringValue11
                             encoderDataStructure_Two.WriteInt32("", 1212) 'myIntValue12
-
-                            'read byte array from encoder
                             argumentByteArray = encoderDataStructure_Two.CloseAndReturnBuffer()
-
-                            'create an extension object and pass arguments to ExtensionObject.Body 
                             extensionObjectDataStructure_Two = New ExtensionObject()
                             extensionObjectDataStructure_Two.Body = argumentByteArray
-
-                            'set type of structure, create a new ExpandedNodeId by name and namespace
                             extensionObjectDataStructure_Two.TypeId = New ExpandedNodeId("DataStructure_Two", Convert.ToUInt16(3))
-
-                            'add structure to ExtensionObjectCollection
                             dataStructure_TwoCollection.Add(extensionObjectDataStructure_Two)
                         Next
-
-
 
                         'write structure array to input arguments
                         encoderDataStructure_One.WriteExtensionObjectArray("", dataStructure_TwoCollection)
@@ -223,19 +209,39 @@ Public Class Program
                         'create an extension object and pass arguments to ExtensionObject.Body
                         Dim extensionObjectWithInputArguments As ExtensionObject = New ExtensionObject()
                         extensionObjectWithInputArguments.Body = argumentByteArray
-
-                        'set type of structure, create a new ExpandedNodeId by name and namespace
                         extensionObjectWithInputArguments.TypeId = New ExpandedNodeId("DataStructure_One", Convert.ToUInt16(3))
 
                         'create your InputArguments with extensionObject
                         Dim inputArguments As VariantCollection = New VariantCollection()
                         inputArguments.Add(New [Variant](extensionObjectWithInputArguments))
 
-                        'create a new NodeId for the Object to which the method should be applied by name and namespace
-                        Dim objectNode As NodeId = New NodeId("myObjectNode", 3)
+                        'resolve object and method via browse
+                        Dim objectNode As NodeId = client.GetNodeIdByPath("Objects.Plant.myObjectNode_Advanced")
+                        If objectNode Is Nothing Then
+                            Console.WriteLine("myObjectNode_Advanced not found - is Server Workshop 13 running?")
+                            Return
+                        End If
 
-                        'create a new NodeId for the Method by name and namespace
-                        Dim methodNode As NodeId = New NodeId("myMethodNode", 3)
+                        Dim methodNode As NodeId = Nothing
+                        Dim browseDesc As New BrowseDescription With {
+                            .NodeId = objectNode,
+                            .BrowseDirection = BrowseDirection.Forward,
+                            .ReferenceTypeId = ReferenceTypeIds.HasComponent,
+                            .IncludeSubtypes = True,
+                            .NodeClassMask = CUInt(NodeClass.Method),
+                            .ResultMask = CUInt(BrowseResultMask.All)
+                        }
+                        Dim refs = client.BrowseFull(New BrowseDescriptionCollection From {browseDesc})
+                        For Each r In refs
+                            If r.BrowseName.Name = "myMethodNode" Then
+                                methodNode = ExpandedNodeId.ToNodeId(r.NodeId, client.GetNamespaceUris())
+                                Exit For
+                            End If
+                        Next
+                        If methodNode Is Nothing Then
+                            Console.WriteLine("myMethodNode not found under myObjectNode_Advanced")
+                            Return
+                        End If
 
                         'create a CallMethodRequest instance and pass your arguments
                         Dim request As CallMethodRequest = New CallMethodRequest()
@@ -246,10 +252,8 @@ Public Class Program
                         'call your method 
                         Dim result As CallMethodResult = client.Call(request)
 
-
                         'finaly evaluate your results,
                         If StatusCode.IsGood(result.StatusCode) Then
-
                             For Each outputArgument As [Variant] In result.OutputArguments
                                 If outputArgument <> [Variant].Null Then _
                                     Console.WriteLine($"output argument: { outputArgument.ToString()}")
@@ -277,30 +281,26 @@ Public Class Program
     End Sub
 
     Private Sub client_CertificateValidation(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
-        ' External certificate validation
         If ServiceResult.IsGood(e.Error) Then
             e.Accept = True
         ElseIf Not e.ContainsUnsuppressibleStatusCodes Then
             e.Accept = True
         ElseIf e.ContainsUnsuppressibleStatusCodes Then
-            e.AcceptAll = True ' You can accept all unsuppressible status codes with this flag
+            e.AcceptAll = True
         Else
             Throw New Exception(String.Format("Failed to validate certificate with error code {0}: {1}", e.Error.Code, e.Error.AdditionalInfo))
         End If
     End Sub
 
     Private Sub Client_ServerConnected(ByVal sender As Object, ByVal e As EventArgs)
-        'event opc ua server is connected
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connected")
     End Sub
 
     Private Sub Client_ServerConnectionLost(ByVal sender As Object, ByVal e As EventArgs)
-        'event connection to opc ua server lost
         Console.WriteLine($"{Date.Now.ToLocalTime()} Session connection lost")
     End Sub
 
     Private Sub Client_KeepAlive(ByVal session As ISession, ByVal e As KeepAliveEventArgs)
-        'catch the keepalive event of opc ua server
     End Sub
 
     Private Sub Client_SessionClosing(ByVal sender As Object, ByVal e As EventArgs)

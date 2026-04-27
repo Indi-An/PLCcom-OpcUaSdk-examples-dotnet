@@ -72,7 +72,7 @@ using System.Threading;
 // -- License -------------------------------------------------------------------
 // TODO: Replace with your license credentials from your license e-mail
 string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial = "<Enter your Serial here>";
+string LicenseSerial   = "<Enter your Serial here>";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 11: Simple Server       ║");
@@ -94,43 +94,10 @@ Console.WriteLine();
 // =============================================================================
 // Step 1: Configure the server
 // =============================================================================
-// UaServerConfiguration holds all server settings.
-// The most important ones are:
-//   ApplicationUri    — unique identifier for this server (used in certificates)
-//   BaseAddresses     — the endpoint URL(s) clients connect to
-//   SecurityPolicies  — which encryption algorithms to offer
-//   CertificateStorePath — where PKI certificates are stored (auto-created)
-var config = new UaServerConfiguration
-{
-    ApplicationName = "PLCcom Workshop 11 - Simple Server",
-    ApplicationUri  = "urn:localhost:PLCcom:Workshop:11",
-    ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-
-    // The endpoint URLs clients will connect to
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-         "opc.https://localhost:48411"  
-    },
-
-    // GetRecommendedSecurityPolicies() returns None + Basic256Sha256,
-    // Aes128_Sha256_RsaOaep and Aes256_Sha256_RsaPss (Sign + SignAndEncrypt)
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-
-    // Allow anonymous connections for this introductory workshop
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-
-    // PKI store for server certificate — created automatically on first start
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "My OPC UA Server",
-    SoftwareVersion  = "1.0.0",
-    BuildNumber      = "42",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/simple-server",
-    CertificateStorePath = @".\pki"
-};
+// All server settings are defined in CreateConfig() below.
+// See that function for a full description of every available option.
+var config = CreateConfig();
+PrintConfig(config);
 
 // =============================================================================
 // Step 2: Create the server and wire up events
@@ -172,9 +139,9 @@ Console.WriteLine();
 Console.WriteLine("── Building address space ───────────────────────────────────");
 
 // Create a folder hierarchy: Objects -> Plant -> Line1 -> Machine1
-var plant   = server.CreateFolder("Plant");
-var line1   = server.CreateFolder(plant, "Line1");
-var machine = server.CreateFolder(line1, "Machine1");
+var plant   = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var line1   = server.CreateFolder(plant, "Line1", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var machine = server.CreateFolder(line1, "Machine1", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
 Console.WriteLine($"  Folder    {plant.Path,-40} {plant.NodeId}");
 Console.WriteLine($"  Folder    {line1.Path,-40} {line1.NodeId}");
@@ -184,17 +151,17 @@ Console.WriteLine($"  Folder    {machine.Path,-40} {machine.NodeId}");
 // The generic type parameter <T> determines the DataType attribute:
 //   double -> Double, float -> Float, int -> Int32, bool -> Boolean,
 //   string -> String, DateTime -> DateTime
-var temperature = server.CreateVariable<double>(machine, "Temperature", initialValue: 21.5);
-var pressure    = server.CreateVariable<float>(machine, "Pressure",     initialValue: 1.013f);
-var rpm         = server.CreateVariable<int>(machine, "RPM",            initialValue: 1500);
-var running     = server.CreateVariable<bool>(machine, "IsRunning",     initialValue: true);
-var status      = server.CreateVariable<string>(machine, "Status",      initialValue: "Idle");
-var lastUpdate  = server.CreateVariable<DateTime>(machine, "LastUpdate", initialValue: DateTime.UtcNow);
+var temperature = server.CreateVariable<double>(machine, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 21.5);
+var pressure    = server.CreateVariable<float>(machine, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 1.013f);
+var rpm         = server.CreateVariable<int>(machine, "RPM", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 1500);
+var running     = server.CreateVariable<bool>(machine, "IsRunning", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: true);
+var status      = server.CreateVariable<string>(machine, "Status", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "Idle");
+var lastUpdate  = server.CreateVariable<DateTime>(machine, "LastUpdate", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: DateTime.UtcNow);
 
 // Read-only variable: clients can read but not write.
 // The server returns BadNotWritable on any write attempt.
 var serialNo = server.CreateVariable<string>(machine, "SerialNumber",
-    initialValue: "SN-2025-001", readOnly: true);
+    UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "SN-2025-001", readOnly: true);
 
 // Array variable: ValueRank is automatically set to OneDimension.
 // Clients see a Double[] value with 3 elements.
@@ -261,4 +228,188 @@ while (true)
     Console.Write($"\r  Cycle={cycle}  Temp={temperature.Value:F1}C  " +
                   $"P={pressure.Value:F3}bar  RPM={rpm.Value}  {status.Value,-8}");
     Thread.Sleep(1000);
+}
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+// Returns the server configuration. All available options are listed here
+// with a description and the default value. Adjust to your needs.
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        // ApplicationName: human-readable name shown to connecting clients
+        //   and embedded in the auto-generated server certificate.
+        ApplicationName = "PLCcom Workshop 11 - Simple Server",
+
+        // ApplicationUri: globally unique identifier for this server instance.
+        //   Must match the URI in the server certificate.
+        //   Recommended format: urn:<host>:<company>:<product>
+        ApplicationUri  = "urn:localhost:PLCcom:Workshop:11",
+
+        // ProductUri: URI identifying the software product (not the instance).
+        //   Typically a URL pointing to the product page.
+        ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+
+        // NamespaceUri: URI for this server's application address space (ns=2).
+        //   Use a stable URI based on your company domain.
+        //   If null, defaults to ApplicationUri + "/nodes".
+        NamespaceUri    = "http://indi-an.com/opcua/workshop/simple-server",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        // These values appear under Server/ServerStatus/BuildInfo in the
+        // OPC UA address space and identify the software to connecting clients.
+        // Null = auto-detect from the assembly.
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+
+        // ── Endpoints ────────────────────────────────────────────────────────
+        // The URLs clients connect to. Multiple endpoints are supported.
+        //   opc.tcp  — binary protocol, best performance, recommended
+        //   opc.https — SOAP/XML over HTTPS, for firewall-friendly scenarios
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        // Which encryption algorithms to offer on the endpoints.
+        // GetRecommendedSecurityPolicies() returns:
+        //   None (no encryption, for development only)
+        //   Basic256Sha256     Sign + SignAndEncrypt
+        //   Aes128_Sha256_RsaOaep  Sign + SignAndEncrypt
+        //   Aes256_Sha256_RsaPss   Sign + SignAndEncrypt
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        // Which authentication methods to accept from connecting clients.
+        //   Anonymous   — no credentials required
+        //   UserName    — username + password (see server.UserManager)
+        //   Certificate — X.509 client certificate (see server.UserManager)
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        // Root path for the PKI directory stores.
+        // Sub-folders own/, trusted/, rejected/, issuers/ are created automatically.
+        // Default: .\pki
+        CertificateStorePath = @".\pki",
+
+        // CertificateSubjectName: subject of the auto-generated server certificate.
+        // Null = auto-generate as "CN=<ApplicationName>, DC=<hostname>".
+        // CertificateSubjectName = "CN=MyServer, DC=myhost",
+
+        // CertificateLifetimeInMonths: validity period of the auto-generated certificate.
+        // Default: 60 months (5 years).
+        CertificateLifetimeInMonths = 60,
+
+        // AutoAcceptUntrustedCertificates: skip client certificate validation.
+        // WARNING: only for development/testing — never use in production!
+        // Default: false.
+        AutoAcceptUntrustedCertificates = false,
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+
+        // ShutdownDelay: seconds the server waits for clients to disconnect
+        // gracefully when Stop() is called. Default: 5.
+        ShutdownDelay = 5,
+
+        // HttpsMutualTls: require the client TLS certificate to match the OPC UA
+        // application certificate sent in CreateSession. Default: false.
+        HttpsMutualTls = false,
+
+        // ── Local Discovery Server (LDS) ──────────────────────────────────────
+        // RegisterWithDiscoveryServer: register with a LDS so that clients can
+        // discover this server via FindServers without knowing its URL.
+        // Default: false.
+        RegisterWithDiscoveryServer = false,
+
+        // DiscoveryRegistrationInterval: re-registration interval in milliseconds.
+        // Only used when RegisterWithDiscoveryServer = true. Default: 30000.
+        // DiscoveryRegistrationInterval = 30000,
+
+        // DiscoveryServerUrl: URL of the LDS to register with.
+        // Only used when RegisterWithDiscoveryServer = true.
+        // Null = use the standard LDS at opc.tcp://localhost:4840.
+        // DiscoveryServerUrl = "opc.tcp://localhost:4840",
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        // These values appear under Server/VendorServerInfo in the OPC UA
+        // address space and identify your product to connecting clients.
+        // Null = the corresponding node is not created.
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        // These values appear under Server/ServerCapabilities/OperationLimits.
+        // All 12 nodes are always present in the address space.
+        // Clients read these values to size their request batches correctly.
+        // 0 = no limit imposed by this server (not recommended for production).
+        MaxNodesPerRead                      = 1000,  // max nodes per Read request
+        MaxNodesPerWrite                     = 1000,  // max nodes per Write request
+        MaxNodesPerBrowse                    = 1000,  // max nodes per Browse/BrowseNext
+        MaxNodesPerHistoryReadData           = 100,   // max nodes per HistoryRead (data)
+        MaxNodesPerHistoryReadEvents         = 100,   // max nodes per HistoryRead (events)
+        MaxNodesPerHistoryUpdateData         = 100,   // max nodes per HistoryUpdate (data)
+        MaxNodesPerHistoryUpdateEvents       = 100,   // max nodes per HistoryUpdate (events)
+        MaxNodesPerMethodCall                = 200,   // max nodes per Method Call
+        MaxNodesPerRegisterNodes             = 1000,  // max nodes per RegisterNodes
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000, // max nodes per TranslateBrowsePaths
+        MaxNodesPerNodeManagement            = 1000,  // max nodes per AddNodes/DeleteNodes
+        MaxMonitoredItemsPerCall             = 1000,  // max items per CreateMonitoredItems
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+// Prints the active server configuration to the console so you can verify
+// all settings at a glance before the server starts accepting connections.
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default: ApplicationUri + /nodes)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses)
+        Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
+    Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
+    Console.WriteLine($"    MaxNodesPerRead                      = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                     = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                    = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData           = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents         = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData         = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents       = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes             = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
+    Console.WriteLine($"    MaxNodesPerNodeManagement            = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall             = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
 }

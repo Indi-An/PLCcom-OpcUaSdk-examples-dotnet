@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -55,6 +55,9 @@ Public Class Program
         Console.WriteLine("║    * How to discover servers at a URL (FindServers)          ║")
         Console.WriteLine("║    * How to query endpoints (GetEndpoints)                   ║")
         Console.WriteLine("║    * How to read endpoint security details                   ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║")
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
@@ -73,7 +76,7 @@ Public Class Program
             ' The server returns all applications it knows about, including their
             ' application name, URI and discovery URLs.
             ' The timeout (60000 ms) limits how long we wait for a response.
-            Dim servers As ApplicationDescriptionCollection = UaClient.FindServers(New Uri(url), 60000)
+            Dim servers As ApplicationDescriptionCollection = UaClient.FindServers(New Uri(url), 60000, certificateValidator:=AddressOf CertificateValidationHandler)
 
             Console.WriteLine($"  Found {servers.Count} server(s).")
             Console.WriteLine()
@@ -94,7 +97,11 @@ Public Class Program
                 ' Each endpoint describes a URL, security mode, security policy
                 ' and the user token policies it accepts.
                 For Each discoveryUrl As String In server.DiscoveryUrls
-                    Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(url), 60000)
+                    Console.WriteLine()
+                    Console.WriteLine($"  Querying endpoints for: {discoveryUrl}")
+                    Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(
+                        New Uri(discoveryUrl),
+                        certificateValidator:=AddressOf CertificateValidationHandler)
 
                     If endpoints.Count > 0 Then
                         Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
@@ -102,7 +109,7 @@ Public Class Program
 
                         Dim counter As Integer = 0
                         For Each endpoint As EndpointDescription In endpoints
-                            Console.WriteLine($"  [{counter}] {UaClient.EndpointToString(endpoint)}")
+                            Console.WriteLine($"  [{counter}] {endpoint.ToDisplayString()}")
                             counter += 1
                         Next
                     Else
@@ -123,4 +130,15 @@ Public Class Program
         Console.ReadLine()
 
     End Sub
+
+    Shared Sub CertificateValidationHandler(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
+        ' Called when the server presents its certificate - both during opc.https
+        ' discovery (TLS) and when a security policy other than None is used.
+        ' Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        Console.WriteLine($"  Validating certificate: {e.Certificate.Subject}")
+        Console.WriteLine($"  Validation result:      {If(ServiceResult.IsGood(e.Error), "OK", e.Error.ToString())}")
+        e.Accept = True ' accept anyway - replace with your logic
+        Console.WriteLine($"  Decision:               accepted")
+    End Sub
+
 End Class

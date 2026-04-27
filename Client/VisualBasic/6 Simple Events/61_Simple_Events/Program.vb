@@ -67,6 +67,9 @@ Module Program
              Console.WriteLine("║    * Create an event subscription with filters               ║")
              Console.WriteLine("║    * Receive and display event notifications                 ║")
              Console.WriteLine("║    * Read event properties (message, severity, source)       ║")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 61 (Simple Events)         ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -75,7 +78,7 @@ Module Program
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
 
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -84,7 +87,7 @@ Module Program
                 Console.WriteLine("endpoints found:")
                 Dim counter As Integer = 0
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine(counter.ToString() & " => " & UaClient.EndpointToString(Endpoint))
+                    Console.WriteLine(counter.ToString() & " => " & Endpoint.ToDisplayString())
                     counter += 1
                 Next
 
@@ -159,6 +162,11 @@ Module Program
                                                 .TypeDefinitionId = ObjectTypeIds.BaseEventType,
                                                 .BrowsePath = New QualifiedNameCollection From {BrowseNames.Time},
                                                 .AttributeId = Attributes.Value
+                                            },
+                                            New SimpleAttributeOperand() With {
+                                                .TypeDefinitionId = ObjectTypeIds.BaseEventType,
+                                                .BrowsePath = New QualifiedNameCollection From {BrowseNames.SourceName},
+                                                .AttributeId = Attributes.Value
                                             }
                                         }
                                     }
@@ -207,12 +215,13 @@ Module Program
         'Events:
         Dim ev As EventFieldList = TryCast(e.NotificationValue, EventFieldList)
         If ev IsNot Nothing Then
-            'Sequence corresponds to SelectClauses (Message, Severity, Time)
+            'Sequence corresponds to SelectClauses (Message, Severity, Time, SourceName)
             Dim message As LocalizedText = TryCast(ev.EventFields(0).Value, LocalizedText)
             Dim severity As UShort = If(TypeOf ev.EventFields(1).Value Is UShort, CUShort(ev.EventFields(1).Value), CUShort(0))
             Dim time As DateTime = If(TypeOf ev.EventFields(2).Value Is DateTime, CDate(ev.EventFields(2).Value), DateTime.MinValue)
+            Dim source As String = If(TryCast(ev.EventFields(3).Value, String), "")
 
-            Console.WriteLine($"[{time:O}] Sev={severity} | {message?.Text}")
+            Console.WriteLine($"  [EVENT] {time:HH:mm:ss.fff} UTC  Source={source,-16} Severity={severity,-6} {message?.Text}")
             Return
         End If
 
@@ -226,7 +235,7 @@ Module Program
     End Sub
 
     Private Sub Subscription_StateChanged(subscription As Subscription, e As SubscriptionStateChangedEventArgs)
-        Console.WriteLine(DateTime.Now.ToLocalTime().ToString() & " State of Subscription " & UaClient.SubscriptionToString(subscription) & " changed to => " & e.Status.ToString())
+        Console.WriteLine(DateTime.Now.ToLocalTime().ToString() & " State of Subscription " & subscription.ToDisplayString() & " changed to => " & e.Status.ToString())
     End Sub
 
     Private Sub Subscription_PublishStatusChanged(sender As Object, e As EventArgs)
@@ -240,7 +249,7 @@ Module Program
         If subscription IsNot Nothing Then
             Dim currentpublishingState As PublishingState = If(subscription.PublishingStopped, PublishingState.STOPPED, PublishingState.RUNNING)
             If currentpublishingState <> currentPublishState OrElse currentpublishingState = PublishingState.STOPPED Then
-                Console.WriteLine(DateTime.Now.ToLocalTime().ToString() & "Publishing state of Subscription " & UaClient.SubscriptionToString(DirectCast(sender, Subscription)) & " => " & currentpublishingState.ToString())
+                Console.WriteLine(DateTime.Now.ToLocalTime().ToString() & "Publishing state of Subscription " & subscription.ToDisplayString() & " => " & currentpublishingState.ToString())
             End If
             currentPublishState = currentpublishingState
         End If

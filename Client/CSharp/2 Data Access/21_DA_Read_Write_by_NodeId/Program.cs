@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -71,6 +71,9 @@ class Program
              Console.WriteLine("║    * Construct NodeIds from string notation                  ║");
              Console.WriteLine("║    * Read single and multiple values (sync and async)        ║");
              Console.WriteLine("║    * Write values and check the StatusCode                   ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -79,7 +82,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -90,7 +93,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -126,27 +129,28 @@ class Program
                     Console.WriteLine("press enter to reading synchronous..");
                     Console.ReadLine();
 
-                    //Read multiple Nodes within one call 
-
-                    //Resolve browse paths to NodeIds first
-                    NodeId temperatureId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Temperature");
-                    NodeId rpmId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.RPM");
-                    NodeId pressureId = client.GetNodeIdByPath("Objects.Plant.Line1.Machine1.Pressure");
+                    // NodeIds are fixed for Server Workshop 11 - assigned in creation order.
+                    // ns=2 is the application namespace; i= is the sequential node counter.
+                    // The counter starts after internal SDK nodes (VendorServerInfo, Namespaces etc.).
+                    // Plant=9, Line1=10, Machine1=11, Temperature=12, Pressure=13, RPM=14
+                    NodeId temperatureId = new NodeId("ns=2;i=12");  // Double
+                    NodeId pressureId    = new NodeId("ns=2;i=13");  // Float
+                    NodeId rpmId         = new NodeId("ns=2;i=14");  // Int32
 
                     //first create a ReadValueIdCollection and fill this with ReadValueId objects
                     ReadValueIdCollection nodesToRead = new ReadValueIdCollection();
                     ReadValueId nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = temperatureId;//Objects.Plant.Line1.Machine1.Temperature
+                    nodeToRead.NodeId = temperatureId; // ns=2;i=12
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
                     nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = rpmId;//Objects.Plant.Line1.Machine1.RPM
+                    nodeToRead.NodeId = rpmId; // ns=2;i=14
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
                     nodeToRead = new ReadValueId();
-                    nodeToRead.NodeId = pressureId; //Objects.Plant.Line1.Machine1.Pressure
+                    nodeToRead.NodeId = pressureId; // ns=2;i=13
                     nodeToRead.AttributeId = Attributes.Value;
                     nodesToRead.Add(nodeToRead);
 
@@ -156,7 +160,8 @@ class Program
                     for (int i = 0; i < readresults.Count; i++)
                     {
                         DataValue res = readresults[i];
-                        Console.WriteLine("synchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + res.Value.ToString() + " StatusCode => " + res.StatusCode.ToString());
+                        string val = StatusCode.IsGood(res.StatusCode) ? res.Value?.ToString() ?? "null" : "(no value)";
+                        Console.WriteLine("synchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + val + " StatusCode => " + res.StatusCode.ToString());
                     }
 
                     Console.WriteLine();
@@ -168,7 +173,9 @@ class Program
 
                     for (int i = 0; i < readResponse.Results.Count; i++)
                     {
-                        Console.WriteLine("asynchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + readResponse.Results[i].ToString() + " StatusCode => " + readResponse.Results[i].StatusCode.ToString());
+                        DataValue res = readResponse.Results[i];
+                        string val = StatusCode.IsGood(res.StatusCode) ? res.Value?.ToString() ?? "null" : "(no value)";
+                        Console.WriteLine("asynchronous read result " + nodesToRead[i].NodeId.ToString() + " Value => " + val + " StatusCode => " + res.StatusCode.ToString());
                     }
 
                     Console.WriteLine();
@@ -178,19 +185,19 @@ class Program
                     //create a WriteValueCollection and fill this with WriteValue objects
                     WriteValueCollection nodesToWrite = new WriteValueCollection();
                     WriteValue writeValue = new WriteValue();
-                    writeValue.NodeId = temperatureId;//Objects.Plant.Line1.Machine1.Temperature
+                    writeValue.NodeId = temperatureId; // ns=2;i=12
                     writeValue.Value = new DataValue(25.5);
                     writeValue.AttributeId = Attributes.Value;
                     nodesToWrite.Add(writeValue);
 
                     writeValue = new WriteValue();
-                    writeValue.NodeId = rpmId;//Objects.Plant.Line1.Machine1.RPM
+                    writeValue.NodeId = rpmId; // ns=2;i=14
                     writeValue.AttributeId = Attributes.Value;
                     writeValue.Value = new DataValue(1750);
                     nodesToWrite.Add(writeValue);
 
                     writeValue = new WriteValue();
-                    writeValue.NodeId = pressureId; //Objects.Plant.Line1.Machine1.Pressure
+                    writeValue.NodeId = pressureId; // ns=2;i=13
                     writeValue.AttributeId = Attributes.Value;
                     writeValue.Value = new DataValue(1.05f);
                     nodesToWrite.Add(writeValue);

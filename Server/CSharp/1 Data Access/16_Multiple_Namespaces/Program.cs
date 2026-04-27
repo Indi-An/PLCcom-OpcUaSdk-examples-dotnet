@@ -97,28 +97,10 @@ Console.WriteLine();
 // =============================================================================
 // Step 1: Configure and start the server
 // =============================================================================
-var config = new UaServerConfiguration
-{
-    ApplicationName  = "PLCcom Workshop 16 - Multiple Namespaces",
-    ApplicationUri   = "urn:localhost:PLCcom:Workshop:16",
-    ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "My OPC UA Server",
-    SoftwareVersion  = "1.0.0",
-    BuildNumber      = "42",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/multiple-namespaces",
-    CertificateStorePath = @".\pki"
-};
+// All server settings are defined in CreateConfig() below.
+// See that function for a full description of every available option.
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (sender, e) => e.Accept = true;
@@ -144,9 +126,9 @@ Console.WriteLine($"  NodeManager.NamespaceIndex = {server.NodeManager.Namespace
 Console.WriteLine();
 
 // Create two variables in default namespace for comparison
-var defaultFolder = server.CreateFolder("DefaultNS");
-var testValue1 = server.CreateVariable<double>(defaultFolder, "TestValue1", initialValue: 42.0);
-var testValue2 = server.CreateVariable<string>(defaultFolder, "TestValue2", initialValue: "hello");
+var defaultFolder = server.CreateFolder("DefaultNS", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var testValue1 = server.CreateVariable<double>(defaultFolder, "TestValue1", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 42.0);
+var testValue2 = server.CreateVariable<string>(defaultFolder, "TestValue2", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "hello");
 Console.WriteLine("-- Default namespace nodes ----------------------------------------");
 Console.WriteLine($"  {defaultFolder.Path,-40} NodeId={defaultFolder.NodeId}  BrowseName={defaultFolder.BrowseName}");
 Console.WriteLine($"  {testValue1.Path,-40} NodeId={testValue1.NodeId}  BrowseName={testValue1.BrowseName}");
@@ -210,14 +192,14 @@ Console.WriteLine("-- Plant A (ns={0}) -----------------------------------------
 
 // Only the top-level folder needs the ns: parameter.
 // All children inherit the namespace from their parent automatically.
-var plantA = server.CreateFolder("PlantA", ns: nsPlantA);
+var plantA = server.CreateFolder("PlantA", UaRolePermissions.WITHOUT_RESTRICTIONS, ns: nsPlantA);
 
-var reactorA = server.CreateObject(plantA, "Reactor", typeDefinitionId: reactorTypeId);
-var tempA    = server.CreateVariable<double>(reactorA, "Temperature", initialValue: 85.0);
-var pressA   = server.CreateVariable<double>(reactorA, "Pressure",    initialValue: 2.5);
+var reactorA = server.CreateObject(plantA, "Reactor", UaRolePermissions.WITHOUT_RESTRICTIONS, reactorTypeId);
+var tempA    = server.CreateVariable<double>(reactorA, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 85.0);
+var pressA   = server.CreateVariable<double>(reactorA, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 2.5);
 
-var mixerA = server.CreateObject(plantA, "Mixer", typeDefinitionId: mixerTypeId);
-var speedA = server.CreateVariable<double>(mixerA, "Speed", initialValue: 120.0);
+var mixerA = server.CreateObject(plantA, "Mixer", UaRolePermissions.WITHOUT_RESTRICTIONS, mixerTypeId);
+var speedA = server.CreateVariable<double>(mixerA, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 120.0);
 
 Console.WriteLine($"  {plantA.Path,-40} NodeId={plantA.NodeId}  BrowseName={plantA.BrowseName}");
 Console.WriteLine($"  {tempA.Path,-40} NodeId={tempA.NodeId}  BrowseName={tempA.BrowseName}");
@@ -234,14 +216,14 @@ Console.WriteLine();
 Console.WriteLine("-- Plant B (ns={0}) ---------------------------------------------", nsPlantB);
 
 // Same for Plant B — only the root folder specifies the namespace.
-var plantB = server.CreateFolder("PlantB", ns: nsPlantB);
+var plantB = server.CreateFolder("PlantB", UaRolePermissions.WITHOUT_RESTRICTIONS, ns: nsPlantB);
 
-var reactorB = server.CreateObject(plantB, "Reactor", typeDefinitionId: reactorTypeId);
-var tempB    = server.CreateVariable<double>(reactorB, "Temperature", initialValue: 92.0);
-var pressB   = server.CreateVariable<double>(reactorB, "Pressure",    initialValue: 3.1);
+var reactorB = server.CreateObject(plantB, "Reactor", UaRolePermissions.WITHOUT_RESTRICTIONS, reactorTypeId);
+var tempB    = server.CreateVariable<double>(reactorB, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 92.0);
+var pressB   = server.CreateVariable<double>(reactorB, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 3.1);
 
-var mixerB = server.CreateObject(plantB, "Mixer", typeDefinitionId: mixerTypeId);
-var speedB = server.CreateVariable<double>(mixerB, "Speed", initialValue: 80.0);
+var mixerB = server.CreateObject(plantB, "Mixer", UaRolePermissions.WITHOUT_RESTRICTIONS, mixerTypeId);
+var speedB = server.CreateVariable<double>(mixerB, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 80.0);
 
 Console.WriteLine($"  {plantB.Path,-40} NodeId={plantB.NodeId}  BrowseName={plantB.BrowseName}");
 Console.WriteLine($"  {tempB.Path,-40} NodeId={tempB.NodeId}  BrowseName={tempB.BrowseName}");
@@ -280,3 +262,100 @@ Console.WriteLine("║                                                          
 Console.WriteLine("║  Press ENTER to exit.                                        ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ReadLine();
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 16 - Multiple Namespaces",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:16",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/multiple-namespaces",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+
+        // ── Endpoints ────────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine($"    VendorName={config.VendorName ?? "(not set)"}  ProductName={config.VendorProductName ?? "(not set)"}  Version={config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine($"    Read={config.MaxNodesPerRead}  Write={config.MaxNodesPerWrite}  Browse={config.MaxNodesPerBrowse}  Method={config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    HistRD={config.MaxNodesPerHistoryReadData}  HistRE={config.MaxNodesPerHistoryReadEvents}  HistUD={config.MaxNodesPerHistoryUpdateData}  HistUE={config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    Register={config.MaxNodesPerRegisterNodes}  Translate={config.MaxNodesPerTranslateBrowsePathsToNodeIds}  NodeMgmt={config.MaxNodesPerNodeManagement}  MonItems={config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
+}

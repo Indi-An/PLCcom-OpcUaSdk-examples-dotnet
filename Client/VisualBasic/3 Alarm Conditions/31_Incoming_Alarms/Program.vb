@@ -70,6 +70,9 @@ Public Class Program
              Console.WriteLine("║    * Subscribe to alarm events                               ║")
              Console.WriteLine("║    * Receive and display incoming alarms                     ║")
              Console.WriteLine("║    * Read alarm properties (severity, message, source)       ║")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)         ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -77,7 +80,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -87,7 +90,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -99,8 +102,8 @@ Public Class Program
                     'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'enable auto connect functionality
-                    sessionConfiguration.AutoConnect = True
+                    'disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = False
 
                     'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
@@ -115,7 +118,11 @@ Public Class Program
                     AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                     AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                     AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-                    Console.WriteLine(client.GetSessionState().ToString())
+
+                    Console.Write("  Connecting ... ")
+                    client.Connect()
+                    Console.WriteLine("OK")
+                    Console.WriteLine($"  Session state: {client.GetSessionState()}")
                     Console.WriteLine()
 
                     Try
@@ -123,10 +130,14 @@ Public Class Program
                         Dim filter As EventFilter = Nothing
 
                         If Console.ReadLine().ToLower().Equals("y") Then
-                            Console.WriteLine($"Please enter filter level... { Microsoft.VisualBasic.Constants.vbCrLf }List of commands: { Microsoft.VisualBasic.Constants.vbCrLf }1    - All { Microsoft.VisualBasic.Constants.vbCrLf }2    - Dialogs { Microsoft.VisualBasic.Constants.vbCrLf }3    - Alarms { Microsoft.VisualBasic.Constants.vbCrLf }4    - Limit alarms { Microsoft.VisualBasic.Constants.vbCrLf }5    - Discrete alarms{ Microsoft.VisualBasic.Constants.vbCrLf}")
+                            Console.WriteLine("Please enter filter level..." & vbCrLf &
+                                              "List of commands:" & vbCrLf &
+                                              "1    - All conditions" & vbCrLf &
+                                              "2    - Dialogs" & vbCrLf &
+                                              "3    - Alarms" & vbCrLf &
+                                              "4    - Limit alarms" & vbCrLf &
+                                              "5    - Discrete alarms")
 
-
-                            'create eventfilter for monitoring
                             Select Case Console.ReadLine().ToLower()
                                 Case "1"
                                     filter = client.CreateFilter(ObjectTypeIds.ConditionType)
@@ -139,26 +150,20 @@ Public Class Program
                                 Case "5"
                                     filter = client.CreateFilter(ObjectTypeIds.DiscreteAlarmType)
                                 Case Else
-                                    Console.WriteLine("Unknown command...")
-                                    'create standard eventfilter for monitoring
                                     filter = client.CreateFilter(ObjectTypeIds.ConditionType)
-                                    filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType)
                             End Select
                         Else
-                            'create standard eventfilter for monitoring
                             filter = client.CreateFilter(ObjectTypeIds.ConditionType)
-                            filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType)
                         End If
 
-                        Console.WriteLine("Start monitoring.....)")
+                        Console.WriteLine("Start monitoring...")
                         Dim subscription As Subscription = New Subscription()
                         subscription.PublishingInterval = 1000
-                        subscription.PublishingEnabled = False
+                        subscription.PublishingEnabled = True
                         subscription.DisplayName = "mySubsription"
 
                         'register subscription events
                         AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
-                        subscription.PublishingEnabled = False
 
                         'add subscription to client
                         client.AddSubscription(subscription)
@@ -202,9 +207,7 @@ Public Class Program
                         'apply changes
                         subscription.ApplyChanges()
 
-                        'enable publishing mode of subscription and set PublishingInterval
-                        subscription.SetPublishingMode(True)
-                        subscription.Modify()
+                        'refresh conditions to get current alarm states
                         client.Refresh_Conditions(subscription)
                     Catch ex As Exception
                         Console.WriteLine(ex)
@@ -263,7 +266,7 @@ Public Class Program
     End Sub
 
     Private Sub Subscription_StateChanged(ByVal subscription As Subscription, ByVal e As SubscriptionStateChangedEventArgs)
-        Console.WriteLine($"{Date.Now.ToLocalTime()} State of Subscription { UaClient.SubscriptionToString(subscription) } changed to => { e.Status.ToString()}")
+        Console.WriteLine($"{Date.Now.ToLocalTime()} State of Subscription { subscription.ToDisplayString() } changed to => { e.Status.ToString()}")
     End Sub
 
     Private Sub Client_MonitorNotification(ByVal monitoredItem As MonitoredItem, ByVal e As MonitoredItemNotificationEventArgs)
@@ -279,20 +282,24 @@ Public Class Program
             If eventTypeId Is ObjectTypeIds.RefreshStartEventType OrElse eventTypeId Is ObjectTypeIds.RefreshEndEventType Then Return
 
 
-            'show actual event alarm data in debug window
+            ' Use GetConditionState to decode the alarm fields into a typed object.
+            ' This is the recommended way to read alarm properties.
+            Dim condition As ConditionState = client.GetConditionState(monitoredItem, notification)
+            If condition Is Nothing Then Return
+
+            ' Retain=true:  alarm is active or unacknowledged (needs attention)
+            ' Retain=false: alarm is resolved (returned to normal and acknowledged)
+            Dim isActive As Boolean = If(condition.Retain?.Value, False)
+            Dim status As String = If(isActive, "ALARM ON ", "ALARM OFF")
+
             Dim sb As StringBuilder = New StringBuilder()
-            sb.Append("new notification received:")
-            sb.Append(Environment.NewLine)
+            sb.AppendLine($"[{status}] {Date.Now.ToLocalTime().ToString("HH:mm:ss")}")
+            sb.AppendLine($"  Source   : {condition.SourceName?.Value}")
+            sb.AppendLine($"  Alarm    : {condition.ConditionName?.Value}")
+            sb.AppendLine($"  Message  : {condition.Message?.Value}")
+            sb.AppendLine($"  Severity : {condition.Severity?.Value}")
+            sb.AppendLine($"  Retain   : {condition.Retain?.Value}  (true=active/unacked, false=resolved)")
 
-            For i As Integer = 0 To notification.EventFields.Count - 1
-
-                If notification.EventFields(i).Value IsNot Nothing Then
-                    sb.Append($" {GetEventFilterMappings(CType(monitoredItem.Filter, EventFilter))(i)} {notification.EventFields(i).Value.ToString()}")
-                    sb.Append(Environment.NewLine)
-                End If
-            Next
-
-            sb.Append(Environment.NewLine)
             Console.WriteLine(sb.ToString())
         Catch exception As Exception
             Console.WriteLine(exception.Message)

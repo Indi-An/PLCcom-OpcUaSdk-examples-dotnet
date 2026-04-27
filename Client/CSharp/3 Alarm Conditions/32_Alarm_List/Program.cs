@@ -79,6 +79,9 @@ class Program
              Console.WriteLine("║    * Maintain a live alarm list                              ║");
              Console.WriteLine("║    * Track alarm state changes                               ║");
              Console.WriteLine("║    * Identify alarms by ConditionId                          ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -87,7 +90,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -98,7 +101,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -112,8 +115,8 @@ class Program
                     SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                                                                                           Endpoints[iNumberOfEndpoint]);
 
-                    //enable auto connect functionality
-                    sessionConfiguration.AutoConnect = true;
+                    //disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = false;
 
                     //output certificate store path
                     Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
@@ -129,23 +132,22 @@ class Program
                     client.KeepAlive += Client_KeepAlive;
                     client.CertificateValidation += client_CertificateValidation;
 
-                    Console.WriteLine(client.GetSessionState().ToString());
+                    Console.Write("  Connecting ... ");
+                    client.Connect();
+                    Console.WriteLine("OK");
                     Console.WriteLine();
 
                     try
                     {
                         EventFilter filter = client.CreateFilter(ObjectTypeIds.ConditionType);
 
-                        filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType);
-
                         Subscription subscription = new Subscription();
                         subscription.PublishingInterval = 1000;
-                        subscription.PublishingEnabled = false;
+                        subscription.PublishingEnabled = true;
                         subscription.DisplayName = "mySubsription";
 
                         //register subscription events
                         subscription.StateChanged += Subscription_StateChanged;
-                        subscription.PublishingEnabled = false;
 
                         //add subscription to client
                         client.AddSubscription(subscription);
@@ -188,13 +190,9 @@ class Program
                         //apply changes
                         subscription.ApplyChanges();
 
-                        //enable publishing mode of subscription and set PublishingInterval
-                        subscription.SetPublishingMode(true);
-                        subscription.Modify();
-
                         client.Refresh_Conditions(subscription);
 
-                        Console.WriteLine("Start monitoring.....)");
+                        Console.WriteLine("Start monitoring...");
                     }
                     catch (Exception ex)
                     {
@@ -274,7 +272,7 @@ class Program
 
     private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
     {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
+        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + subscription.ToDisplayString() + " changed to => " + e.Status.ToString());
     }
 
     private void Client_MonitorNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
@@ -293,27 +291,23 @@ class Program
             if (eventTypeId == ObjectTypeIds.RefreshStartEventType ||
                 eventTypeId == ObjectTypeIds.RefreshEndEventType) return;
 
-            //Create output string
+            ConditionState condition = client.GetConditionState(monitoredItem, notification);
+            if (condition == null) return;
+
+            // Build output for this notification
             StringBuilder sb = new StringBuilder();
             sb.Append(DateTime.Now.ToLocalTime() + " new Alarm notification:");
             sb.Append(Environment.NewLine);
-            ConditionState actualAlarmcondition = client.GetConditionState(monitoredItem, notification);
-            sb.Append(String.Format("Source={0} ", actualAlarmcondition.SourceName.Value));
-            sb.Append(String.Format("Condition={0} ", actualAlarmcondition.ConditionName.Value));
-            sb.Append(String.Format("Severity={0} ", actualAlarmcondition.Severity.Value));
-            sb.Append(String.Format("Time={0} ", actualAlarmcondition.Time.Value.ToLocalTime()));
-            sb.Append(String.Format("State={0} ", actualAlarmcondition.EnabledState.EffectiveDisplayName.Value));
-            sb.Append(String.Format("Message={0} ", actualAlarmcondition.Message.Value));
-            sb.Append(String.Format("Comment={0} ", actualAlarmcondition.Comment.Value));
-
+            sb.Append($"  Source    = {condition.SourceName?.Value} ");
+            sb.Append($"  Condition = {condition.ConditionName?.Value} ");
+            sb.Append($"  Severity  = {condition.Severity?.Value} ");
+            sb.Append($"  Time      = {condition.Time?.Value.ToLocalTime()} ");
+            sb.Append($"  State     = {condition.EnabledState?.EffectiveDisplayName?.Value} ");
+            sb.Append($"  Message   = {condition.Message?.Value} ");
+            sb.Append($"  Retain    = {condition.Retain?.Value} ");
             sb.Append(Environment.NewLine);
-            sb.Append("Current alarm list:");
-            sb.Append(Environment.NewLine);
-
-            ConditionState condition = client.GetConditionState(monitoredItem, notification);
 
             AlarmEvent ae = client.CreateAlarmEvent(condition.NodeId, condition);
-            //AlarmEventListe aufbauen und aktualisieren
             for (int i = 0; i < notification.EventFields.Count; i++)
             {
                 string filtername = GetEventFilterMappings((EventFilter)monitoredItem.Filter)[i].Replace("/", "");
@@ -321,30 +315,33 @@ class Program
                 ae.AlarmEventItems.Add(filtername, aei);
             }
 
-            string Identifier = "NodeID:" + condition.NodeId.ToString() + " BrancheID:" + (condition.BranchId != null ? condition.BranchId.Value.ToString() : "");
+            string Identifier = "NodeID:" + condition.NodeId.ToString() +
+                                " BrancheID:" + (condition.BranchId?.Value?.ToString() ?? "");
 
-            //Update Alarm cache
-            if (mAlarmEventCache.ContainsKey(Identifier))
+            // Update alarm cache — Retain=false means alarm is resolved, remove it
+            bool retain = condition.Retain?.Value ?? false;
+            lock (mAlarmEventCache)
             {
-                mAlarmEventCache[Identifier] = ae;
-            }
-            else
-            {
-                mAlarmEventCache.Add(Identifier, ae);
+                if (retain)
+                    mAlarmEventCache[Identifier] = ae;
+                else
+                    mAlarmEventCache.Remove(Identifier);
             }
 
+            // Print current alarm list
+            sb.Append("Current alarm list:");
+            sb.Append(Environment.NewLine);
             foreach (AlarmEvent alarmEvent in GetEventCache(true))
             {
                 ConditionState alarmCondition = alarmEvent.GetConditionState();
-                sb.Append(String.Format("Source={0} ", alarmCondition.SourceName.Value));
-                sb.Append(String.Format("Condition={0} ", alarmCondition.ConditionName.Value));
-                sb.Append(String.Format("Severity={0} ", alarmCondition.Severity.Value));
-                sb.Append(String.Format("Time={0} ", alarmCondition.Time.Value.ToLocalTime()));
-                sb.Append(String.Format("State={0} ", alarmCondition.EnabledState.EffectiveDisplayName.Value));
-                sb.Append(String.Format("Message={0} ", alarmCondition.Message.Value));
-                sb.Append(String.Format("Comment={0} ", alarmCondition.Comment.Value));
+                sb.Append($"  [{alarmCondition.ConditionName?.Value}] " +
+                          $"Source={alarmCondition.SourceName?.Value} " +
+                          $"Severity={alarmCondition.Severity?.Value} " +
+                          $"Message={alarmCondition.Message?.Value}");
                 sb.Append(Environment.NewLine);
             }
+            if (!GetEventCache(false).Any())
+                sb.AppendLine("  (no active alarms)");
 
             sb.Append(Environment.NewLine);
 

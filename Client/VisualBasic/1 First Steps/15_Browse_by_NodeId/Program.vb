@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -61,6 +61,9 @@ Public Class Program
         Console.WriteLine("║    * Browse from ObjectsFolder (i=85)                        ║")
         Console.WriteLine("║    * Read NodeId, NodeClass, BrowseName, DisplayName         ║")
         Console.WriteLine("║    * BrowseFull handles continuation points automatically    ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║")
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
@@ -76,7 +79,7 @@ Public Class Program
             Console.WriteLine("  Discovering endpoints...")
             Console.WriteLine()
 
-            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), 60000)
+            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), certificateValidator:=AddressOf CertificateValidationHandler)
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints)
 
             If endpoints.Count = 0 Then
@@ -88,7 +91,7 @@ Public Class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:")
             Console.WriteLine()
             For i As Integer = 0 To endpoints.Count - 1
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints(i))}")
+                Console.WriteLine($"  [{i}] {endpoints(i).ToDisplayString()}")
             Next
 
             Console.WriteLine()
@@ -109,7 +112,7 @@ Public Class Program
             Using client As New UaClient(LicenseUserName, LicenseSerial, sessionConfig)
                 Console.WriteLine("  License: " & client.GetLicenceMessage())
 
-                AddHandler client.CertificateValidation, Sub(sender, e) e.Accept = True
+                AddHandler client.CertificateValidation, AddressOf CertificateValidationHandler
                 AddHandler client.ServerConnected, Sub(s, e)
                     Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss}")
                 End Sub
@@ -174,4 +177,11 @@ Public Class Program
 
     End Sub
 
+    Private Sub CertificateValidationHandler(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
+        ' Called when the server presents its certificate - both during opc.https
+        ' discovery (TLS) and when a security policy other than None is used.
+        ' Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = True
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}")
+    End Sub
 End Class

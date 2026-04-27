@@ -109,28 +109,10 @@ Console.WriteLine();
 // =============================================================================
 // Step 1: Configure and start the server
 // =============================================================================
-var config = new UaServerConfiguration
-{
-    ApplicationName  = "PLCcom Workshop 14 - Variables and Arrays",
-    ApplicationUri   = "urn:localhost:PLCcom:Workshop:14",
-    ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "My OPC UA Server",
-    SoftwareVersion  = "1.0.0",
-    BuildNumber      = "42",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/variables-and-arrays",
-    CertificateStorePath = @".\pki"
-};
+// All server settings are defined in CreateConfig() below.
+// See that function for a full description of every available option.
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (sender, e) => e.Accept = true;
@@ -150,45 +132,25 @@ Console.WriteLine();
 // =============================================================================
 // Step 2: Scalar data types
 // =============================================================================
-// OPC UA defines a rich set of built-in data types. The generic type parameter
-// of CreateVariable<T> maps directly to the OPC UA DataType attribute:
-//
-//   C# Type     ->  OPC UA DataType
-//   --------        ---------------
-//   bool        ->  Boolean
-//   byte        ->  Byte
-//   sbyte       ->  SByte
-//   short       ->  Int16
-//   ushort      ->  UInt16
-//   int         ->  Int32
-//   uint        ->  UInt32
-//   long        ->  Int64
-//   ulong       ->  UInt64
-//   float       ->  Float
-//   double      ->  Double
-//   string      ->  String
-//   DateTime    ->  DateTime
-//   Guid        ->  Guid
-//   byte[]      ->  ByteString
 Console.WriteLine("-- Part A: Scalar data types ------------------------------------");
 
-var scalars = server.CreateFolder("Scalars");
+var scalars = server.CreateFolder("Scalars", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-var vBool       = server.CreateVariable<bool>(scalars,     "MyBool",       true);
-var vByte       = server.CreateVariable<byte>(scalars,     "MyByte",       42);
-var vSByte      = server.CreateVariable<sbyte>(scalars,    "MySByte",      -7);
-var vInt16      = server.CreateVariable<short>(scalars,    "MyInt16",      -1000);
-var vUInt16     = server.CreateVariable<ushort>(scalars,   "MyUInt16",     5000);
-var vInt32      = server.CreateVariable<int>(scalars,      "MyInt32",      100000);
-var vUInt32     = server.CreateVariable<uint>(scalars,     "MyUInt32",     200000u);
-var vInt64      = server.CreateVariable<long>(scalars,     "MyInt64",      9876543210L);
-var vUInt64     = server.CreateVariable<ulong>(scalars,    "MyUInt64",     1234567890UL);
-var vFloat      = server.CreateVariable<float>(scalars,    "MyFloat",      3.14f);
-var vDouble     = server.CreateVariable<double>(scalars,   "MyDouble",     2.71828);
-var vString     = server.CreateVariable<string>(scalars,   "MyString",     "Hello OPC UA");
-var vDateTime   = server.CreateVariable<DateTime>(scalars, "MyDateTime",   DateTime.UtcNow);
-var vGuid       = server.CreateVariable<Guid>(scalars,     "MyGuid",       Guid.NewGuid());
-var vByteString = server.CreateVariable<byte[]>(scalars,   "MyByteString", new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
+var vBool       = server.CreateVariable<bool>(scalars,     "MyBool", UaRolePermissions.WITHOUT_RESTRICTIONS, true);
+var vByte       = server.CreateVariable<byte>(scalars,     "MyByte", UaRolePermissions.WITHOUT_RESTRICTIONS, 42);
+var vSByte      = server.CreateVariable<sbyte>(scalars,    "MySByte", UaRolePermissions.WITHOUT_RESTRICTIONS, -7);
+var vInt16      = server.CreateVariable<short>(scalars,    "MyInt16", UaRolePermissions.WITHOUT_RESTRICTIONS, -1000);
+var vUInt16     = server.CreateVariable<ushort>(scalars,   "MyUInt16", UaRolePermissions.WITHOUT_RESTRICTIONS, 5000);
+var vInt32      = server.CreateVariable<int>(scalars,      "MyInt32", UaRolePermissions.WITHOUT_RESTRICTIONS, 100000);
+var vUInt32     = server.CreateVariable<uint>(scalars,     "MyUInt32", UaRolePermissions.WITHOUT_RESTRICTIONS, 200000u);
+var vInt64      = server.CreateVariable<long>(scalars,     "MyInt64", UaRolePermissions.WITHOUT_RESTRICTIONS, 9876543210L);
+var vUInt64     = server.CreateVariable<ulong>(scalars,    "MyUInt64", UaRolePermissions.WITHOUT_RESTRICTIONS, 1234567890UL);
+var vFloat      = server.CreateVariable<float>(scalars,    "MyFloat", UaRolePermissions.WITHOUT_RESTRICTIONS, 3.14f);
+var vDouble     = server.CreateVariable<double>(scalars,   "MyDouble", UaRolePermissions.WITHOUT_RESTRICTIONS, 2.71828);
+var vString     = server.CreateVariable<string>(scalars,   "MyString", UaRolePermissions.WITHOUT_RESTRICTIONS, "Hello OPC UA");
+var vDateTime   = server.CreateVariable<DateTime>(scalars, "MyDateTime", UaRolePermissions.WITHOUT_RESTRICTIONS, DateTime.UtcNow);
+var vGuid       = server.CreateVariable<Guid>(scalars,     "MyGuid",       UaRolePermissions.WITHOUT_RESTRICTIONS, Guid.NewGuid());
+var vByteString = server.CreateVariable<byte[]>(scalars,   "MyByteString", UaRolePermissions.WITHOUT_RESTRICTIONS, new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
 
 Console.WriteLine($"  Boolean     {vBool.Path,-40} = {vBool.Value}");
 Console.WriteLine($"  Byte        {vByte.Path,-40} = {vByte.Value}");
@@ -210,30 +172,19 @@ Console.WriteLine();
 // =============================================================================
 // Step 3: Properties — EURange and EngineeringUnits
 // =============================================================================
-// OPC UA Properties are metadata attached to a variable. The two most common
-// properties for analog values are:
-//
-//   EURange           — the expected value range (Low, High)
-//                       HMI clients use this to scale gauges and bar graphs
-//
-//   EngineeringUnits  — the physical unit of measurement (e.g. "degC", "bar")
-//                       HMI clients display this next to the value
-//
-// In UaExpert: select a variable, look at the Attributes panel.
-// EURange and EngineeringUnits appear as child properties.
 Console.WriteLine("-- Part B: Properties (EURange, EngineeringUnits) --------------");
 
-var props = server.CreateFolder("Properties");
+var props = server.CreateFolder("Properties", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-var temperature = server.CreateVariable<double>(props, "Temperature", 22.5);
+var temperature = server.CreateVariable<double>(props, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, 22.5);
 temperature.SetEURange(0, 100);
 temperature.SetEngineeringUnits("degC", "Degrees Celsius");
 
-var pressure = server.CreateVariable<double>(props, "Pressure", 1.013);
+var pressure = server.CreateVariable<double>(props, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, 1.013);
 pressure.SetEURange(0, 10);
 pressure.SetEngineeringUnits("bar", "Bar");
 
-var speed = server.CreateVariable<double>(props, "Speed", 1500.0);
+var speed = server.CreateVariable<double>(props, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, 1500.0);
 speed.SetEURange(0, 3000);
 speed.SetEngineeringUnits("rpm", "Revolutions per minute");
 
@@ -245,40 +196,28 @@ Console.WriteLine();
 // =============================================================================
 // Step 4: OnRead / OnWrite callbacks
 // =============================================================================
-// OnRead is called every time a client reads the variable.
-//   -> Return a computed value (e.g. unit conversion, live calculation)
-//   -> The returned value is sent to the client and cached in the node
-//
-// OnWrite is called every time a client writes a new value.
-//   -> Return true to accept the write
-//   -> Return false to reject it (client receives BadOutOfRange)
-//
-// These callbacks run inside the OPC UA stack's lock, so keep them fast.
 Console.WriteLine("-- Part C: OnRead / OnWrite callbacks ---------------------------");
 
-var callbacks = server.CreateFolder("Callbacks");
+var callbacks = server.CreateFolder("Callbacks", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-// Computed variable: OnRead converts Temperature from Celsius to Fahrenheit
-var computed = server.CreateVariable<double>(callbacks, "Computed", 0.0, readOnly: true);
+var computed = server.CreateVariable<double>(callbacks, "Computed", UaRolePermissions.WITHOUT_RESTRICTIONS, 0.0, readOnly: true);
 computed.OnRead = (currentValue) =>
 {
     return Math.Round(temperature.Value * 1.8 + 32.0, 2);
 };
 
-// Validated variable: OnWrite rejects values outside 0..100
-var validated = server.CreateVariable<int>(callbacks, "Validated", 50);
+var validated = server.CreateVariable<int>(callbacks, "Validated", UaRolePermissions.WITHOUT_RESTRICTIONS, 50);
 validated.OnWrite = (newValue) =>
 {
     if (newValue < 0 || newValue > 100)
     {
         Console.WriteLine($"  !! Rejected write: {newValue} (must be 0..100)");
-        return false;  // -> client receives BadOutOfRange
+        return false;
     }
-    return true;  // -> accept the write
+    return true;
 };
 
-// Read-only counter: incremented by the server, clients cannot write
-var counter = server.CreateVariable<int>(callbacks, "Counter", 0, readOnly: true);
+var counter = server.CreateVariable<int>(callbacks, "Counter", UaRolePermissions.WITHOUT_RESTRICTIONS, 0, readOnly: true);
 
 Console.WriteLine($"  {computed.Path,-45} OnRead -> Fahrenheit");
 Console.WriteLine($"  {validated.Path,-45} OnWrite -> reject if not 0..100");
@@ -288,32 +227,17 @@ Console.WriteLine();
 // =============================================================================
 // Step 5: Arrays and exposeElements
 // =============================================================================
-// CreateArrayVariable<T> creates a variable with ValueRank = OneDimension.
-// The value is a T[] array that clients read/write as a whole.
-//
-// With exposeElements: true, the SDK additionally creates child nodes
-// for each array element: V[0], V[1], V[2], ...
-// Each child is a separate OPC UA Variable that clients can:
-//   - Browse individually
-//   - Subscribe to individually (get DataChange for just one element)
-//   - Read/Write individually (without touching the whole array)
-//
-// The parent array and the child elements stay synchronized automatically.
 Console.WriteLine("-- Part D: Arrays and exposeElements ----------------------------");
 
-var arrays = server.CreateFolder("Arrays");
+var arrays = server.CreateFolder("Arrays", UaRolePermissions.WITHOUT_RESTRICTIONS);
 
-// Plain array — no child nodes, read/write the whole array at once
 var temps = server.CreateArrayVariable<double>(arrays, "Temperatures",
     initialValue: new double[] { 20.0, 21.5, 22.0, 23.5, 24.0 });
 
-// Array with exposeElements — each element is a browsable child node
-// In UaExpert: browse Arrays -> Setpoints -> V[0], V[1], V[2], V[3]
 var setpoints = server.CreateArrayVariable<double>(arrays, "Setpoints",
     initialValue: new double[] { 100.0, 200.0, 300.0, 400.0 },
     exposeElements: true);
 
-// Boolean array with exposeElements
 var flags = server.CreateArrayVariable<bool>(arrays, "Flags",
     initialValue: new bool[] { true, false, true },
     exposeElements: true);
@@ -356,15 +280,11 @@ while (true)
 {
     cycle++;
 
-    // Update scalar values
     temperature.Value = Math.Round(18.0 + rng.NextDouble() * 12.0, 2);
     pressure.Value    = Math.Round(0.8 + rng.NextDouble() * 0.5, 3);
     speed.Value       = 1200.0 + rng.Next(600);
+    counter.Value     = (int)cycle;
 
-    // Increment the read-only counter from server side
-    counter.Value = (int)cycle;
-
-    // Update the plain array (whole array at once)
     temps.Value = new double[]
     {
         Math.Round(19.0 + rng.NextDouble() * 3.0, 1),
@@ -374,8 +294,6 @@ while (true)
         Math.Round(23.0 + rng.NextDouble() * 3.0, 1)
     };
 
-    // Update individual elements of the exposed array
-    // Each assignment triggers a DataChange only for that element's subscribers
     setpoints.Value = new double[]
     {
         100.0 + rng.Next(50),
@@ -388,4 +306,112 @@ while (true)
                   $"({computed.Value:F1}F)  P={pressure.Value:F3}bar  " +
                   $"Counter={counter.Value}  ");
     Thread.Sleep(1000);
+}
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName = "PLCcom Workshop 14 - Variables and Arrays",
+        ApplicationUri  = "urn:localhost:PLCcom:Workshop:14",
+        ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri    = "http://indi-an.com/opcua/workshop/variables-and-arrays",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+
+        // ── Endpoints ────────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses)
+        Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
+    Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
+    Console.WriteLine($"    MaxNodesPerRead                      = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                     = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                    = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData           = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents         = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData         = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents       = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes             = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
+    Console.WriteLine($"    MaxNodesPerNodeManagement            = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall             = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
 }

@@ -81,6 +81,9 @@ class Program
              Console.WriteLine("║    * Acknowledge an alarm condition                          ║");
              Console.WriteLine("║    * Confirm an alarm condition                              ║");
              Console.WriteLine("║    * Add comments to conditions                              ║");
+             Console.WriteLine("║                                                              ║");
+             Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║");
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
              Console.WriteLine();
 
@@ -89,7 +92,7 @@ class Program
             string LicenseUserName = "<Enter your UserName here>";
             string LicenseSerial = "<Enter your Serial here>";
 
-            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), 60000);
+            EndpointDescriptionCollection Endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"), certificateValidator: client_CertificateValidation);
 
             //sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints);
@@ -100,7 +103,7 @@ class Program
                 int counter = 0;
                 foreach (EndpointDescription Endpoint in Endpoints)
                 {
-                    Console.WriteLine(counter++.ToString() + " => " + UaClient.EndpointToString(Endpoint));
+                    Console.WriteLine(counter++.ToString() + " => " + Endpoint.ToDisplayString());
                 }
 
                 Console.WriteLine("please enter index of desired endpoint");
@@ -115,8 +118,8 @@ class Program
                     SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                                                                                           Endpoints[iNumberOfEndpoint]);
 
-                    //enable auto connect functionality
-                    sessionConfiguration.AutoConnect = true;
+                    //disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = false;
 
                     //output certificate store path
                     Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " + sessionConfiguration.CertificateStorePath);
@@ -132,7 +135,10 @@ class Program
                     client.KeepAlive += Client_KeepAlive;
                     client.CertificateValidation += client_CertificateValidation;
 
-                    Console.WriteLine(client.GetSessionState().ToString());
+                    Console.Write("  Connecting ... ");
+                    client.Connect();
+                    Console.WriteLine("OK");
+                    Console.WriteLine();
 
                     Console.WriteLine("Would you like to enter a filter? y/n");
 
@@ -170,28 +176,24 @@ class Program
                                 Console.WriteLine("Unknown command...");
                                 //create standard eventfilter for monitoring
                                 filter = client.CreateFilter(ObjectTypeIds.ConditionType);
-                                filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType);
                                 break;
                         }
 
                     }
                     else
                     {
-                        //create standard eventfilter for monitoring
                         filter = client.CreateFilter(ObjectTypeIds.ConditionType);
-                        filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType);
                     }
 
-                    Console.WriteLine("Start monitoring.....)");
+                    Console.WriteLine("Start monitoring...");
 
                     Subscription subscription = new Subscription();
                     subscription.PublishingInterval = 1000;
-                    subscription.PublishingEnabled = false;
+                    subscription.PublishingEnabled = true;
                     subscription.DisplayName = "mySubsription";
 
                     //register subscription events
                     subscription.StateChanged += Subscription_StateChanged;
-                    subscription.PublishingEnabled = false;
 
                     //add subscription to client
                     client.AddSubscription(subscription);
@@ -234,13 +236,9 @@ class Program
                     //apply changes
                     subscription.ApplyChanges();
 
-                    //enable publishing mode of subscription and set PublishingInterval
-                    subscription.SetPublishingMode(true);
-                    subscription.Modify();
-
                     client.Refresh_Conditions(subscription);
 
-                    Console.WriteLine("Start monitoring.....)");
+                    Console.WriteLine("Start monitoring...");
 
                     string command = string.Empty;
 
@@ -248,11 +246,11 @@ class Program
                     {
                         Console.WriteLine();
                         string commandList = "List of commands: \r\n" +
-                                "1    - List all alarms \r\n" +
-                                "2    - Refresh active alarms \r\n" +
-                                "3    - Enable alarm \r\n" +
-                                "4    - Disable alarm \r\n" +
-                                "5  - Acknowledge alarm\r\n" +
+                                "1 - List all alarms \r\n" +
+                                "2 - Refresh active alarms \r\n" +
+                                "3 - Enable alarm \r\n" +
+                                "4 - Disable alarm \r\n" +
+                                "5 - Acknowledge alarm\r\n" +
                                 "6 - Add comment\r\n" +
                                 "7 - Confirm alarm\r\n" +
                                 "8 - Shelve alarm \r\n" +
@@ -342,11 +340,11 @@ class Program
                                 {
                                     case "on":
                                         Console.WriteLine("on => Online..");
-                                        Respond(AlarmNumber, true);
+                                        Respond(AlarmNumber, 0);
                                         break;
                                     case "off":
                                         Console.WriteLine("off => Offline..");
-                                        Respond(AlarmNumber, false);
+                                        Respond(AlarmNumber, 1);
                                         break;
                                     case "exit":
                                         Console.WriteLine("exit => Abort shelving..");
@@ -468,7 +466,7 @@ class Program
 
     private void Subscription_StateChanged(Subscription subscription, SubscriptionStateChangedEventArgs e)
     {
-        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + UaClient.SubscriptionToString(subscription) + " changed to => " + e.Status.ToString());
+        Console.WriteLine(DateTime.Now.ToLocalTime() + " State of Subscription " + subscription.ToDisplayString() + " changed to => " + e.Status.ToString());
     }
 
     private void Client_MonitorNotification(MonitoredItem monitoredItem, MonitoredItemNotificationEventArgs e)
@@ -493,16 +491,17 @@ class Program
                 ae.AlarmEventItems.Add(filtername, aei);
             }
 
-            string Identifier = "NodeID:" + condition.NodeId.ToString() + " BrancheID:" + (condition.BranchId != null ? condition.BranchId.Value.ToString() : "");
+            string Identifier = "NodeID:" + condition.NodeId.ToString() +
+                                " BrancheID:" + (condition.BranchId?.Value?.ToString() ?? "");
 
-            //Update Alarm cache
-            if (mAlarmEventCache.ContainsKey(Identifier))
+            // Retain=false means alarm resolved - remove from cache
+            bool retain = condition.Retain?.Value ?? false;
+            lock (mAlarmEventCache)
             {
-                mAlarmEventCache[Identifier] = ae;
-            }
-            else
-            {
-                mAlarmEventCache.Add(Identifier, ae);
+                if (retain)
+                    mAlarmEventCache[Identifier] = ae;
+                else
+                    mAlarmEventCache.Remove(Identifier);
             }
         }
         catch (Exception exception)
@@ -524,14 +523,14 @@ class Program
             {
                 sb.Append(String.Format("{0} ", counter++.ToString()));
                 ConditionState condition = alarmEvent.GetConditionState();
-                sb.Append(String.Format("Source={0} ", condition.SourceName.Value));
-                sb.Append(String.Format("Condition={0} ", condition.ConditionName.Value));
+                sb.Append(String.Format("Source={0} ",    condition.SourceName?.Value));
+                sb.Append(String.Format("Condition={0} ", condition.ConditionName?.Value));
                 if (condition.BranchId != null) sb.Append(String.Format("Branch={0} ", condition.BranchId.Value));
-                sb.Append(String.Format("Severity={0} ", condition.Severity.Value));
-                sb.Append(String.Format("Time={0} ", condition.Time.Value.ToLocalTime()));
-                sb.Append(String.Format("State={0} ", condition.EnabledState.EffectiveDisplayName.Value));
-                sb.Append(String.Format("Message={0} ", condition.Message.Value));
-                sb.Append(String.Format("Comment={0} ", condition.Comment.Value));
+                sb.Append(String.Format("Severity={0} ", condition.Severity?.Value));
+                sb.Append(String.Format("Time={0} ",     condition.Time?.Value.ToLocalTime()));
+                sb.Append(String.Format("State={0} ",   condition.EnabledState?.EffectiveDisplayName?.Value));
+                sb.Append(String.Format("Message={0} ", condition.Message?.Value));
+                sb.Append(String.Format("Retain={0} ",  condition.Retain?.Value));
                 sb.Append(Environment.NewLine);
             }
 
@@ -550,7 +549,7 @@ class Program
     {
         try
         {
-            if (AlarmNumber > mEventFilterMappings.Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
             }
@@ -570,7 +569,7 @@ class Program
     {
         try
         {
-            if (AlarmNumber > GetEventCache(false).Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
             }
@@ -590,7 +589,7 @@ class Program
     {
         try
         {
-            if (AlarmNumber > GetEventCache(false).Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
             }
@@ -610,7 +609,7 @@ class Program
     {
         try
         {
-            if (AlarmNumber > GetEventCache(false).Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
             }
@@ -630,7 +629,7 @@ class Program
     {
         try
         {
-            if (AlarmNumber > GetEventCache(false).Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
             }
@@ -646,22 +645,22 @@ class Program
         }
     }
 
-    private void Respond(uint AlarmNumber, bool OnlineState)
+    private void Respond(uint AlarmNumber, int responseIndex)
     {
         try
         {
-            if (AlarmNumber > GetEventCache(false).Count)
+            if (AlarmNumber >= (uint)GetEventCache(false).Count)
             {
                 Console.WriteLine("AlarmNumber " + AlarmNumber.ToString() + " is out of range");
+                return;
             }
 
             AlarmEvent alarmEvent = GetEventCache(false).ToArray()[AlarmNumber];
-            alarmEvent.Respond(OnlineState);
+            alarmEvent.Respond(responseIndex);
             Console.WriteLine("method successfully");
         }
         catch (Exception ex)
         {
-
             Console.WriteLine(ex);
         }
     }

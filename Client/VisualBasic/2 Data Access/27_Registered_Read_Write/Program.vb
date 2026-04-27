@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -56,28 +56,31 @@ Public Class Program
     Private Sub Start()
         Try
 
-         Console.WriteLine()
+            Console.WriteLine()
 
 
-             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
-             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 27: Registered R/W      ║")
-             Console.WriteLine("║                                                              ║")
-             Console.WriteLine("║  RegisterNodes tells the server to optimize access to        ║")
-             Console.WriteLine("║  specific nodes. The server caches internal references,      ║")
-             Console.WriteLine("║  making subsequent read/write operations faster.             ║")
-             Console.WriteLine("║                                                              ║")
-             Console.WriteLine("║  What you will learn:                                        ║")
-             Console.WriteLine("║    * Register nodes for optimized access                     ║")
-             Console.WriteLine("║    * Read and write using registered NodeIds                 ║")
-             Console.WriteLine("║    * Unregister nodes when done                              ║")
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
-             Console.WriteLine()
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
+            Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 27: Registered R/W      ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  RegisterNodes tells the server to optimize access to        ║")
+            Console.WriteLine("║  specific nodes. The server caches internal references,      ║")
+            Console.WriteLine("║  making subsequent read/write operations faster.             ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  What you will learn:                                        ║")
+            Console.WriteLine("║    * Register nodes for optimized access                     ║")
+            Console.WriteLine("║    * Read and write using registered NodeIds                 ║")
+            Console.WriteLine("║    * Unregister nodes when done                              ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
+            Console.WriteLine()
 
             'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -87,7 +90,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -175,7 +178,7 @@ Public Class Program
                                 If StatusCode.IsBad(readresults(ii).StatusCode) Then
                                     value = Utils.Format("{0}", readresults(ii).StatusCode)
                                 Else
-                                    Dim typeInfo As TypeInfo = typeInfo.Construct(readresults(ii).Value)
+                                    Dim typeInfo As TypeInfo = TypeInfo.Construct(readresults(ii).Value)
                                     datatype = typeInfo.BuiltInType.ToString()
 
                                     If typeInfo.ValueRank >= ValueRanks.OneOrMoreDimensions Then

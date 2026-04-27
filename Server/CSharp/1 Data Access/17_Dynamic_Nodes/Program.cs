@@ -23,37 +23,20 @@
 // PLCcom OPC UA Server SDK - Workshop 17: Dynamic Nodes
 //
 // In most OPC UA servers the address space is static - built once at startup.
-// However, the SDK also supports dynamic changes at runtime:
-//   * Add new folders and variables while the server is running
-//   * Remove nodes that are no longer needed
-//   * Connected clients see the changes immediately on their next browse
+// This SDK supports dynamic changes at runtime using the same API as at startup:
+//   * CreateFolder / CreateVariable / CreateObject work before AND after Start()
+//   * RemoveNode removes a node and all its children at any time
+//   * Connected clients see changes immediately on their next browse
 //
-// This workshop demonstrates:
+// This workshop demonstrates step by step — pause between each step to inspect
+// the address space with your OPC UA client:
 //
-//   Part A — Initial address space (created right after Start)
-//   Part B — Path-based node lookup (GetNodeId, GetVariable)
-//   Part C — Dynamic node creation (add nodes at runtime)
-//   Part D — Dynamic node removal (RemoveNode)
-//   Part E — Circular reference detection
-//   Part F — Timer-based dynamic creation (simulates device discovery)
-//
-// The address space evolves at runtime:
-//   Objects
-//     +-- Plant
-//     |     +-- Line1
-//     |     |     +-- Temperature  (Double) = 22.0
-//     |     +-- DynamicNodes                          <- added at runtime
-//     |     |     +-- Message      (String) = "Hello" <- Counter removed
-//     |     +-- Device_1                              <- added by timer
-//     |     +-- Device_2                              <- added by timer
-//     |     +-- ...
-//
-// What you will learn:
-//   * How to add nodes after server.Start()
-//   * How to remove nodes by NodeId (including all children)
-//   * How to find nodes by dot-separated browse path
-//   * How the SDK prevents circular references
-//   * How to simulate device discovery with periodic node creation
+//   Step 1 — Initial address space (Plant/Line1/Temperature)
+//   Step 2 — Add nodes at runtime (DynamicNodes folder with Counter + Message)
+//   Step 3 — Remove a single node (Counter removed, Message stays)
+//   Step 4 — Remove an entire subtree (DynamicNodes folder + all children)
+//   Step 5 — Path-based lookup (GetNodeId, GetValue, SetValue)
+//   Step 6 — Timer-based device discovery (new Device_N every 5 seconds)
 //
 // Connect with any OPC UA client to: opc.tcp://localhost:48410
 // ==============================================================================
@@ -67,48 +50,29 @@ using System.Threading;
 // -- License -------------------------------------------------------------------
 // TODO: Replace with your license credentials from your license e-mail
 string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial = "<Enter your Serial here>";
+string LicenseSerial   = "<Enter your Serial here>";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 17: Dynamic Nodes       ║");
 Console.WriteLine("║                                                              ║");
-Console.WriteLine("║  This example demonstrates:                                  ║");
-Console.WriteLine("║    * Adding nodes at runtime                                 ║");
-Console.WriteLine("║    * Removing nodes dynamically                              ║");
-Console.WriteLine("║    * Path-based node lookup (dot-separated)                  ║");
-Console.WriteLine("║    * Circular reference detection                            ║");
-Console.WriteLine("║    * Timer-based device discovery simulation                 ║");
+Console.WriteLine("║  Demonstrates live address space changes at runtime.         ║");
+Console.WriteLine("║  Use an OPC UA client to inspect the address space between   ║");
+Console.WriteLine("║  each step.                                                  ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Endpoint: opc.tcp://localhost:48410                         ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.WriteLine();
 
-// =============================================================================
-// Step 1: Configure and start the server
-// =============================================================================
-var config = new UaServerConfiguration
-{
-    ApplicationName  = "PLCcom Workshop 17 - Dynamic Nodes",
-    ApplicationUri   = "urn:localhost:PLCcom:Workshop:17",
-    ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-    BaseAddresses = new List<string>
-    {
-        "opc.tcp://localhost:48410",
-        "opc.https://localhost:48411"
-    },
-    SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-    UserTokenPolicies = new List<UserTokenPolicy>
-    {
-        new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
-    },
-    ManufacturerName = "My Company GmbH",
-    ProductName      = "My OPC UA Server",
-    SoftwareVersion  = "1.0.0",
-    BuildNumber      = "42",
-    NamespaceUri     = "http://indi-an.com/opcua/workshop/dynamic-nodes",
-    CertificateStorePath = @".\pki"
-};
+var config = CreateConfig();
+PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.CertificateValidation += (sender, e) => e.Accept = true;
+
+server.SessionCreated += (s, e) =>
+    Console.WriteLine($"  [SESSION+] {e.SessionName ?? "unknown"} from {e.ClientUri ?? "unknown"}");
+server.SessionClosed += (s, e) =>
+    Console.WriteLine($"  [SESSION-] {e.SessionName ?? "unknown"}");
 
 server.ValuesWritten += (s, e) =>
 {
@@ -123,128 +87,137 @@ Console.WriteLine("OK");
 Console.WriteLine();
 
 // =============================================================================
-// Part A: Initial address space
+// Step 1: Initial address space
 // =============================================================================
-// These nodes are created right after Start() - this is the normal pattern.
-// All nodes are immediately visible to connected clients.
-Console.WriteLine("-- Part A: Initial address space ---------------------------------");
+var plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var line1 = server.CreateFolder(plant, "Line1", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var temp  = server.CreateVariable<double>(line1, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 22.0);
 
-var plant = server.CreateFolder("Plant");
-var line1 = server.CreateFolder(plant, "Line1");
-var temp  = server.CreateVariable<double>(line1, "Temperature", initialValue: 22.0);
+Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║  Step 1/5 — Initial address space                            ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  The server is running with a static address space:          ║");
+Console.WriteLine("║    Objects                                                   ║");
+Console.WriteLine("║      └── Plant                                               ║");
+Console.WriteLine("║            └── Line1                                         ║");
+Console.WriteLine("║                  └── Temperature = 22.0                      ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Connect your OPC UA client and browse the address space.    ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Press ENTER to add new nodes at runtime.                    ║");
+Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+Console.ReadLine();
 
-Console.WriteLine($"  {plant.Path,-45} {plant.NodeId}");
-Console.WriteLine($"  {line1.Path,-45} {line1.NodeId}");
-Console.WriteLine($"  {temp.Path,-45} {temp.NodeId}  = {temp.Value}");
+// =============================================================================
+// Step 2: Add nodes at runtime
+// =============================================================================
+// CreateFolder and CreateVariable work exactly the same after Start() as before.
+// Connected clients see the new nodes immediately on their next browse.
+var dynFolder = server.CreateFolder(plant, "DynamicNodes", UaRolePermissions.WITHOUT_RESTRICTIONS);
+var dynCounter = server.CreateVariable<int>(dynFolder, "Counter", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 42);
+var dynMessage = server.CreateVariable<string>(dynFolder, "Message", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "Hello");
+
+Console.WriteLine($"  + Created: {dynCounter.Path} = {dynCounter.Value}");
+Console.WriteLine($"  + Created: {dynMessage.Path} = {dynMessage.Value}");
 Console.WriteLine();
+Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║  Step 2/5 — Nodes added at runtime                           ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Two new nodes were added while the server was running:      ║");
+Console.WriteLine("║    Objects                                                   ║");
+Console.WriteLine("║      └── Plant                                               ║");
+Console.WriteLine("║            ├── Line1/Temperature                             ║");
+Console.WriteLine("║            └── DynamicNodes          ← NEW                   ║");
+Console.WriteLine("║                  ├── Counter = 42    ← NEW                   ║");
+Console.WriteLine("║                  └── Message = Hello ← NEW                   ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Refresh your client browser — the new nodes are visible.    ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Press ENTER to remove the Counter node.                     ║");
+Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+Console.ReadLine();
 
 // =============================================================================
-// Part B: Path-based node lookup
+// Step 3: Remove a single node
 // =============================================================================
-// GetNodeId() resolves a dot-separated browse path to a NodeId.
-// GetVariable<T>() returns a typed wrapper for the variable at the given path.
-// These are useful when you need to reference a node by its logical path
-// rather than storing the NodeId from CreateFolder/CreateVariable.
-Console.WriteLine("-- Part B: Path-based node lookup --------------------------------");
+// RemoveNode removes exactly the specified node. Sibling nodes are unaffected.
+bool removed = server.RemoveNode(dynCounter.NodeId);
+Console.WriteLine($"  - Removed: {dynCounter.Path}  →  {(removed ? "OK" : "FAILED")}");
+Console.WriteLine();
+Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║  Step 3/5 — Single node removed                              ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Counter was removed. Message is still there:                ║");
+Console.WriteLine("║    Objects                                                   ║");
+Console.WriteLine("║      └── Plant                                               ║");
+Console.WriteLine("║            ├── Line1/Temperature                             ║");
+Console.WriteLine("║            └── DynamicNodes                                  ║");
+Console.WriteLine("║                  └── Message = Hello  (Counter is gone)      ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Refresh your client — Counter has disappeared.              ║");
+Console.WriteLine("║  Subscriptions on Counter now receive BadNodeIdUnknown.      ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Press ENTER to remove the entire DynamicNodes subtree.      ║");
+Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+Console.ReadLine();
+
+// =============================================================================
+// Step 4: Remove an entire subtree
+// =============================================================================
+// RemoveNode on a folder removes the folder AND all its children recursively.
+removed = server.RemoveNode(dynFolder.NodeId);
+Console.WriteLine($"  - Removed: {dynFolder.Path} (including all children)  →  {(removed ? "OK" : "FAILED")}");
+Console.WriteLine();
+Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║  Step 4/5 — Entire subtree removed                           ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  DynamicNodes folder and all remaining children are gone:    ║");
+Console.WriteLine("║    Objects                                                   ║");
+Console.WriteLine("║      └── Plant                                               ║");
+Console.WriteLine("║            └── Line1                                         ║");
+Console.WriteLine("║                  └── Temperature = 22.0                      ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  The address space is back to its initial state.             ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Press ENTER to demonstrate path-based lookup.               ║");
+Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+Console.ReadLine();
+
+// =============================================================================
+// Step 5: Path-based lookup
+// =============================================================================
+// GetNodeId / GetValue / SetValue let you access nodes by dot-separated path
+// without storing the NodeId or UaVariable wrapper from creation time.
+Console.WriteLine("-- Step 5/5: Path-based lookup -----------------------------------");
 
 var nodeId = server.GetNodeId("Objects.Plant.Line1.Temperature");
 Console.WriteLine($"  GetNodeId(\"Objects.Plant.Line1.Temperature\") = {nodeId}");
 
-var variable = server.GetVariable<double>("Objects.Plant.Line1.Temperature");
-Console.WriteLine($"  GetVariable -> Value = {variable?.Value}");
+double currentVal = server.GetValue<double>("Objects.Plant.Line1.Temperature");
+Console.WriteLine($"  GetValue  = {currentVal}");
 
-// GetValue/SetValue by path
-double val = server.GetValue<double>("Objects.Plant.Line1.Temperature");
-Console.WriteLine($"  GetValue(\"Objects.Plant.Line1.Temperature\") = {val}");
-
-server.SetValue("Objects.Plant.Line1.Temperature", 25.5);
-Console.WriteLine($"  SetValue(\"Objects.Plant.Line1.Temperature\", 25.5)");
-Console.WriteLine($"  GetValue after SetValue = {server.GetValue<double>("Objects.Plant.Line1.Temperature")}");
+server.SetValue("Objects.Plant.Line1.Temperature", 99.9);
+Console.WriteLine($"  SetValue  → 99.9");
+Console.WriteLine($"  GetValue  = {server.GetValue<double>("Objects.Plant.Line1.Temperature")}");
 Console.WriteLine();
 
 // =============================================================================
-// Part C: Dynamic node creation
-// =============================================================================
-// Nodes can be added at any time after Start().
-// Connected clients will see the new nodes immediately on their next browse.
-// The Path property is assigned automatically based on the parent hierarchy.
-Console.WriteLine("-- Part C: Dynamic node creation ---------------------------------");
-
-var dynFolder = server.CreateFolder(plant, "DynamicNodes");
-var dynVar1   = server.CreateVariable<int>(dynFolder, "Counter", initialValue: 42);
-var dynVar2   = server.CreateVariable<string>(dynFolder, "Message", initialValue: "Hello");
-
-Console.WriteLine($"  Created: {dynVar1.Path,-40} = {dynVar1.Value}");
-Console.WriteLine($"  Created: {dynVar2.Path,-40} = {dynVar2.Value}");
-Console.WriteLine();
-
-// =============================================================================
-// Part D: Dynamic node removal
-// =============================================================================
-// RemoveNode() removes the node and all its children from the address space.
-// The path index and write handlers are cleaned up automatically.
-// Connected clients that have subscriptions on removed nodes will receive
-// a BadNodeIdUnknown status on their next publish cycle.
-Console.WriteLine("-- Part D: Dynamic node removal ----------------------------------");
-
-Console.WriteLine($"  Removing {dynVar1.Path} ...");
-bool removed = server.RemoveNode(dynVar1.NodeId);
-Console.WriteLine($"  Result: {(removed ? "OK - node removed" : "FAILED")}");
-
-// Verify the node is gone
-var check = server.GetNodeId("Objects.Plant.DynamicNodes.Counter");
-Console.WriteLine($"  GetNodeId after removal: {(check == null ? "null (correct)" : check.ToString())}");
-Console.WriteLine();
-
-// Remove an entire folder with all children
-Console.WriteLine($"  Removing entire DynamicNodes folder ...");
-removed = server.RemoveNode(dynFolder.NodeId);
-Console.WriteLine($"  Result: {(removed ? "OK - folder and children removed" : "FAILED")}");
-
-check = server.GetNodeId("Objects.Plant.DynamicNodes.Message");
-Console.WriteLine($"  GetNodeId(\"...DynamicNodes.Message\"): {(check == null ? "null (correct)" : check.ToString())}");
-Console.WriteLine();
-
-// =============================================================================
-// Part E: Circular reference detection
-// =============================================================================
-// The SDK prevents you from creating a folder with the same name as one of
-// its ancestors, which would create a circular reference in the address space.
-// This throws an ArgumentException with a descriptive message.
-Console.WriteLine("-- Part E: Circular reference detection --------------------------");
-
-Console.Write("  Creating \"Plant\" under Line1 (ancestor name): ");
-try
-{
-    server.CreateFolder(line1, "Plant");
-    Console.WriteLine("NOT DETECTED (unexpected)");
-}
-catch (ArgumentException ex)
-{
-    Console.WriteLine($"BLOCKED - {ex.Message}");
-}
-Console.WriteLine();
-
-// =============================================================================
-// Part F: Timer-based device discovery simulation
+// Step 6: Timer-based device discovery
 // =============================================================================
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-Console.WriteLine("║  Server is running. Connect with any OPC UA client to:       ║");
-Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
+Console.WriteLine("║  Step 5/5 — Timer-based device discovery                     ║");
 Console.WriteLine("║                                                              ║");
-Console.WriteLine("║  Try:                                                        ║");
-Console.WriteLine("║  * Browse Plant - DynamicNodes was removed                   ║");
-Console.WriteLine("║  * Watch new Device_N folders appear every 5 seconds         ║");
-Console.WriteLine("║  * Each device has Temperature and Status variables          ║");
-Console.WriteLine("║  * After 5 devices, the oldest is removed (sliding window)   ║");
+Console.WriteLine("║  Every 5 seconds a new Device_N folder appears under Plant.  ║");
+Console.WriteLine("║  After 5 devices the oldest is removed (sliding window).     ║");
 Console.WriteLine("║                                                              ║");
-Console.WriteLine("║  Press ENTER to start the device discovery simulation.       ║");
+Console.WriteLine("║  Watch your OPC UA client — devices appear and disappear     ║");
+Console.WriteLine("║  in real time without restarting the server.                 ║");
+Console.WriteLine("║                                                              ║");
+Console.WriteLine("║  Press ENTER to start the simulation (CTRL+C to exit).       ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ReadLine();
 
-// Simulate device discovery: every 5 seconds a new "device" appears.
-// After 5 devices, the oldest one is removed (sliding window).
-Console.WriteLine("Simulating device discovery... (CTRL+C to exit)");
+Console.WriteLine("Simulating device discovery...");
 Console.WriteLine();
 
 var rng = new Random();
@@ -257,24 +230,116 @@ while (true)
     deviceNumber++;
     string deviceName = $"Device_{deviceNumber}";
 
-    // Create a new device folder with variables
-    var deviceFolder = server.CreateFolder(plant, deviceName);
-    var devTemp   = server.CreateVariable<double>(deviceFolder, "Temperature",
-        initialValue: Math.Round(20.0 + rng.NextDouble() * 15.0, 1));
-    var devStatus = server.CreateVariable<string>(deviceFolder, "Status",
-        initialValue: "Online");
+    var deviceFolder = server.CreateFolder(plant, deviceName, UaRolePermissions.WITHOUT_RESTRICTIONS);
+    var devTemp      = server.CreateVariable<double>(deviceFolder, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: Math.Round(20.0 + rng.NextDouble() * 15.0, 1));
+    var devStatus    = server.CreateVariable<string>(deviceFolder, "Status",      UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: "Online");
 
     activeDevices.Enqueue((deviceName, deviceFolder.NodeId));
-    Console.WriteLine($"  + Discovered {deviceName}: Temp={devTemp.Value:F1}, Status={devStatus.Value}");
+    Console.WriteLine($"  + {deviceName}: Temp={devTemp.Value:F1}  Status={devStatus.Value}");
 
-    // Remove the oldest device if we exceed the sliding window
     if (activeDevices.Count > MaxDevices)
     {
         var oldest = activeDevices.Dequeue();
         server.RemoveNode(oldest.FolderId);
-        Console.WriteLine($"  - Removed {oldest.Name} (sliding window)");
+        Console.WriteLine($"  - Removed {oldest.Name} (sliding window, max={MaxDevices})");
     }
 
-    Console.WriteLine($"    Active devices: {activeDevices.Count}");
+    Console.WriteLine($"    Active: {activeDevices.Count}/{MaxDevices}");
     Thread.Sleep(5000);
+}
+
+// =============================================================================
+// Helper: CreateConfig
+// =============================================================================
+static UaServerConfiguration CreateConfig()
+{
+    return new UaServerConfiguration
+    {
+        // ── Application Identity ──────────────────────────────────────────────
+        ApplicationName  = "PLCcom Workshop 17 - Dynamic Nodes",
+        ApplicationUri   = "urn:localhost:PLCcom:Workshop:17",
+        ProductUri       = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri     = "http://indi-an.com/opcua/workshop/dynamic-nodes",
+
+        // ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        ManufacturerName = "My Company GmbH",
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+        // ── Endpoints ──────────────────────────────────────────────────────
+        BaseAddresses = new List<string>
+        {
+            "opc.tcp://localhost:48410",
+            "opc.https://localhost:48411"
+        },
+
+        // ── Security Policies ────────────────────────────────────────────────
+        SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
+
+        // ── User Authentication ───────────────────────────────────────────────
+        UserTokenPolicies = new List<UserTokenPolicy>
+        {
+            new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
+        },
+
+        // ── PKI Certificate Store ─────────────────────────────────────────────
+        CertificateStorePath        = @".\pki",
+        CertificateLifetimeInMonths = 60,
+        AutoAcceptUntrustedCertificates = false,
+        // ── Endpoint Host Normalization ───────────────────────────────────────
+        // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        // None                   = no normalization, behavior depends on DNS and network settings
+        EndpointHostMode = EndpointHostMode.AsConfigured,
+        MaxSessionCount = 100,
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
+        VendorProductVersion = "1.0.0",
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                      = 1000,
+        MaxNodesPerWrite                     = 1000,
+        MaxNodesPerBrowse                    = 1000,
+        MaxNodesPerHistoryReadData           = 100,
+        MaxNodesPerHistoryReadEvents         = 100,
+        MaxNodesPerHistoryUpdateData         = 100,
+        MaxNodesPerHistoryUpdateEvents       = 100,
+        MaxNodesPerMethodCall                = 200,
+        MaxNodesPerRegisterNodes             = 1000,
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
+        MaxNodesPerNodeManagement            = 1000,
+        MaxMonitoredItemsPerCall             = 1000,
+    };
+}
+
+// =============================================================================
+// Helper: PrintConfig
+// =============================================================================
+static void PrintConfig(UaServerConfiguration config)
+{
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
+    Console.WriteLine();
+    Console.WriteLine("  Endpoints:");
+    foreach (var addr in config.BaseAddresses) Console.WriteLine($"    {addr}");
+    Console.WriteLine();
+        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine("  VendorServerInfo:");
+    Console.WriteLine($"    VendorName={config.VendorName ?? "(not set)"}  ProductName={config.VendorProductName ?? "(not set)"}  Version={config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits:");
+    Console.WriteLine($"    Read={config.MaxNodesPerRead}  Write={config.MaxNodesPerWrite}  Browse={config.MaxNodesPerBrowse}  Method={config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    HistRD={config.MaxNodesPerHistoryReadData}  HistRE={config.MaxNodesPerHistoryReadEvents}  HistUD={config.MaxNodesPerHistoryUpdateData}  HistUE={config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    Register={config.MaxNodesPerRegisterNodes}  Translate={config.MaxNodesPerTranslateBrowsePathsToNodeIds}  NodeMgmt={config.MaxNodesPerNodeManagement}  MonItems={config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
 }

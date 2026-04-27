@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -7,7 +6,6 @@
     <Company>Indi.An GmbH</Company>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.2.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.3.*" />
   </ItemGroup>
-
 </Project>

@@ -64,6 +64,9 @@ class Program
         Console.WriteLine("║    * Create a SessionConfiguration from an endpoint          ║");
         Console.WriteLine("║    * Register KeepAlive and ConnectionState events           ║");
         Console.WriteLine("║    * Handle server certificate validation                    ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -84,7 +87,12 @@ class Program
             Console.WriteLine("  Discovering endpoints...");
             Console.WriteLine();
 
-            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            // Certificate validation is called when the server presents its certificate -
+            // both during opc.https discovery (TLS) and during session connect when a
+            // security policy other than None is used (opc.tcp and opc.https).
+            // The same handler is reused for both GetEndpoints and the session below.
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(
+                new Uri(serverUrl), certificateValidator: CertificateValidationHandler);
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
 
             if (endpoints.Count == 0)
@@ -98,7 +106,7 @@ class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
             Console.WriteLine();
             for (int i = 0; i < endpoints.Count; i++)
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+                Console.WriteLine($"  [{i}] {endpoints[i].ToDisplayString()}");
 
             Console.WriteLine();
             Console.Write("  Please enter index of desired endpoint: ");
@@ -112,7 +120,7 @@ class Program
             }
 
             Console.WriteLine();
-            Console.WriteLine($"  Selected: {UaClient.EndpointToString(endpoints[index])}");
+            Console.WriteLine($"  Selected: {endpoints[index].ToDisplayString()}");
             Console.WriteLine();
 
             // -- Step 3: Build SessionConfiguration -------------------------------
@@ -150,11 +158,7 @@ class Program
             // CertificateValidation is called when the server presents its certificate.
             // Accept all certificates for development. In production, verify against
             // a trusted certificate store.
-            client.CertificateValidation += (sender, e) =>
-            {
-                e.Accept = true;
-                Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
-            };
+            client.CertificateValidation += CertificateValidationHandler;
 
             // -- Step 5: Connect --------------------------------------------------
             Console.Write("  Connecting ... ");
@@ -179,5 +183,14 @@ class Program
             Console.WriteLine("  Press ENTER to exit.");
             Console.ReadLine();
         }
+    }
+
+    void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
+    {
+        // Called when the server presents its certificate - both during opc.https
+        // discovery (TLS) and when a security policy other than None is used.
+        // Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = true;
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
     }
 }

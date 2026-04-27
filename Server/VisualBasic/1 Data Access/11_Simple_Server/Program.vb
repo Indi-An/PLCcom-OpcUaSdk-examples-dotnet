@@ -84,25 +84,9 @@ Module Program
         ' =====================================================================
         ' Step 1: Configure the server
         ' =====================================================================
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 11 - Simple Server",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:11",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .ManufacturerName = "My Company GmbH",
-            .ProductName = "My OPC UA Server",
-            .SoftwareVersion = "1.0.0",
-            .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/simple-server",
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         ' =====================================================================
         ' Step 2: Create the server and wire up events
@@ -134,23 +118,22 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Building address space ----------------------------------------")
 
-            Dim plant = server.CreateFolder("Plant")
-            Dim line1 = server.CreateFolder(plant, "Line1")
-            Dim machine = server.CreateFolder(line1, "Machine1")
+            Dim plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim line1 = server.CreateFolder(plant, "Line1", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim machine = server.CreateFolder(line1, "Machine1", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
             Console.WriteLine($"  Folder    {plant.Path,-40} {plant.NodeId}")
             Console.WriteLine($"  Folder    {line1.Path,-40} {line1.NodeId}")
             Console.WriteLine($"  Folder    {machine.Path,-40} {machine.NodeId}")
 
-            Dim temperature = server.CreateVariable(Of Double)(machine, "Temperature", initialValue:=21.5)
-            Dim pressure = server.CreateVariable(Of Single)(machine, "Pressure", initialValue:=1.013F)
-            Dim rpm = server.CreateVariable(Of Integer)(machine, "RPM", initialValue:=1500)
-            Dim running = server.CreateVariable(Of Boolean)(machine, "IsRunning", initialValue:=True)
-            Dim status = server.CreateVariable(Of String)(machine, "Status", initialValue:="Idle")
-            Dim lastUpdate = server.CreateVariable(Of DateTime)(machine, "LastUpdate", initialValue:=DateTime.UtcNow)
+            Dim temperature = server.CreateVariable(Of Double)(machine, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=21.5)
+            Dim pressure = server.CreateVariable(Of Single)(machine, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=1.013F)
+            Dim rpm = server.CreateVariable(Of Integer)(machine, "RPM", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=1500)
+            Dim running = server.CreateVariable(Of Boolean)(machine, "IsRunning", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=True)
+            Dim status = server.CreateVariable(Of String)(machine, "Status", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="Idle")
+            Dim lastUpdate = server.CreateVariable(Of DateTime)(machine, "LastUpdate", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=DateTime.UtcNow)
 
-            Dim serialNo = server.CreateVariable(Of String)(machine, "SerialNumber",
-                initialValue:="SN-2025-001", readOnly:=True)
+            Dim serialNo = server.CreateVariable(Of String)(machine, "SerialNumber", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="SN-2025-001", readOnly:=True)
 
             Dim setpoints = server.CreateArrayVariable(Of Double)(machine, "Setpoints",
                 initialValue:=New Double() {20.0, 25.0, 30.0})
@@ -209,6 +192,73 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        cfg.ApplicationName = "PLCcom Workshop 11 - Simple Server"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:11"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/simple-server"
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay   = 5
+        cfg.VendorName           = "My Company GmbH"
+        cfg.VendorProductName    = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+        cfg.MaxNodesPerRead = 1000 : cfg.MaxNodesPerWrite = 1000 : cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData = 100 : cfg.MaxNodesPerHistoryReadEvents = 100
+        cfg.MaxNodesPerHistoryUpdateData = 100 : cfg.MaxNodesPerHistoryUpdateEvents = 100
+        cfg.MaxNodesPerMethodCall = 200 : cfg.MaxNodesPerRegisterNodes = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement = 1000 : cfg.MaxMonitoredItemsPerCall = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

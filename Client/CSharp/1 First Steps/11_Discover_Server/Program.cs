@@ -57,6 +57,9 @@ class Program
         Console.WriteLine("║    * How to discover servers at a URL (FindServers)          ║");
         Console.WriteLine("║    * How to query endpoints (GetEndpoints)                   ║");
         Console.WriteLine("║    * How to read endpoint security details                   ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -76,7 +79,7 @@ class Program
             // The server returns all applications it knows about, including their
             // application name, URI and discovery URLs.
             // The timeout (60000 ms) limits how long we wait for a response.
-            ApplicationDescriptionCollection servers = UaClient.FindServers(new Uri(url), 60000);
+            ApplicationDescriptionCollection servers = UaClient.FindServers(new Uri(url), 60000, certificateValidator: CertificateValidationHandler);
 
             Console.WriteLine($"  Found {servers.Count} server(s).");
             Console.WriteLine();
@@ -97,7 +100,11 @@ class Program
                 // and the user token policies it accepts.
                 foreach (string discoveryUrl in server.DiscoveryUrls)
                 {
-                    EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(url), 60000);
+                    Console.WriteLine();
+                    Console.WriteLine($"  Querying endpoints for: {discoveryUrl}");
+                    EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(
+                        new Uri(discoveryUrl),
+                        certificateValidator: CertificateValidationHandler);
 
                     if (endpoints.Count > 0)
                     {
@@ -107,7 +114,7 @@ class Program
                         int counter = 0;
                         foreach (EndpointDescription endpoint in endpoints)
                         {
-                            Console.WriteLine($"  [{counter++}] {UaClient.EndpointToString(endpoint)}");
+                            Console.WriteLine($"  [{counter++}] {endpoint.ToDisplayString()}");
                         }
                     }
                     else
@@ -128,5 +135,16 @@ class Program
         Console.WriteLine();
         Console.WriteLine("  Press ENTER to exit.");
         Console.ReadLine();
+    }
+
+    static void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
+    {
+        // Called when the server presents its certificate - both during opc.https
+        // discovery (TLS) and when a security policy other than None is used.
+        // Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        Console.WriteLine($"  Validating certificate: {e.Certificate.Subject}");
+        Console.WriteLine($"  Validation result:      {(ServiceResult.IsGood(e.Error) ? "OK" : e.Error.ToString())}");
+        e.Accept = true; // accept anyway - replace with your logic
+        Console.WriteLine($"  Decision:               accepted");
     }
 }

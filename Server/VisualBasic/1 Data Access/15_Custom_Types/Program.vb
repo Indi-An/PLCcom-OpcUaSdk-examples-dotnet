@@ -58,25 +58,9 @@ Module Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
-        Dim config As New UaServerConfiguration With {
-            .ApplicationName = "PLCcom Workshop 15 - Custom Types",
-            .ApplicationUri = "urn:localhost:PLCcom:Workshop:15",
-            .ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-            .BaseAddresses = New List(Of String) From {
-                "opc.tcp://localhost:48410",
-                "opc.https://localhost:48411"
-            },
-            .SecurityPolicies = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {
-                New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}
-            },
-            .ManufacturerName = "My Company GmbH",
-            .ProductName = "My OPC UA Server",
-            .SoftwareVersion = "1.0.0",
-            .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/custom-types",
-            .CertificateStorePath = ".\pki"
-        }
+        ' All server settings are defined in CreateConfig() below.
+        Dim config = CreateConfig()
+        PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
@@ -104,25 +88,25 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part A: Object Hierarchy -------------------------------------")
 
-            Dim hierarchy = server.CreateFolder("Hierarchy")
+            Dim hierarchy = server.CreateFolder("Hierarchy", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
             Dim motorTypeId = server.CreateObjectType("MotorType")
             Dim bearingTypeId = server.CreateObjectType("BearingType")
             Dim machineTypeId = server.CreateObjectType("MachineType")
 
-            Dim machine = server.CreateObject(hierarchy, "CNC_Machine_01", typeDefinitionId:=machineTypeId)
+            Dim machine = server.CreateObject(hierarchy, "CNC_Machine_01", UaRolePermissions.WITHOUT_RESTRICTIONS, machineTypeId)
 
-            Dim motor = server.CreateObject(machine.NodeId, "MainMotor", typeDefinitionId:=motorTypeId)
-            server.CreateVariable(Of Double)(motor, "Speed", initialValue:=1500.0)
-            server.CreateVariable(Of Double)(motor, "Temperature", initialValue:=45.0)
-            server.CreateVariable(Of Boolean)(motor, "Running", initialValue:=True)
+            Dim motor = server.CreateObject(machine.NodeId, "MainMotor", UaRolePermissions.WITHOUT_RESTRICTIONS, motorTypeId)
+            server.CreateVariable(Of Double)(motor, "Speed", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=1500.0)
+            server.CreateVariable(Of Double)(motor, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=45.0)
+            server.CreateVariable(Of Boolean)(motor, "Running", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=True)
 
-            Dim bearing = server.CreateObject(machine.NodeId, "MainBearing", typeDefinitionId:=bearingTypeId)
-            server.CreateVariable(Of Double)(bearing, "Temperature", initialValue:=38.0)
-            server.CreateVariable(Of Double)(bearing, "Vibration", initialValue:=0.5)
+            Dim bearing = server.CreateObject(machine.NodeId, "MainBearing", UaRolePermissions.WITHOUT_RESTRICTIONS, bearingTypeId)
+            server.CreateVariable(Of Double)(bearing, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=38.0)
+            server.CreateVariable(Of Double)(bearing, "Vibration", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=0.5)
 
-            server.CreateVariable(Of String)(machine, "State", initialValue:="Running")
-            server.CreateVariable(Of Long)(machine, "CycleCount", initialValue:=0L)
+            server.CreateVariable(Of String)(machine, "State", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:="Running")
+            server.CreateVariable(Of Long)(machine, "CycleCount", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=0L)
 
             Console.WriteLine($"  {machine.Path}")
             Console.WriteLine($"    MainMotor    (MotorType):   Speed=1500, Temp=45, Running=true")
@@ -134,7 +118,7 @@ Module Program
             ' =================================================================
             Console.WriteLine("-- Part B: Flat Structs -----------------------------------------")
 
-            Dim structFolder = server.CreateFolder("StructData")
+            Dim structFolder = server.CreateFolder("StructData", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
             Dim motorDataTypeId = server.CreateStructDataType("MotorDataType",
                 ("Speed", DataTypeIds.Double, Nothing),
@@ -146,12 +130,12 @@ Module Program
                 ("CycleCount", DataTypeIds.Int64, Nothing),
                 ("MotorSpeed", DataTypeIds.Double, Nothing))
 
-            Dim motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId)
+            Dim motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             motorStruct.SetField(Of Double)("Speed", 1500.0)
             motorStruct.SetField(Of Double)("Temperature", 45.0)
             motorStruct.SetField(Of Boolean)("Running", True)
 
-            Dim machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId)
+            Dim machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             machineStruct.SetField(Of String)("State", "Running")
             machineStruct.SetField(Of Long)("CycleCount", 0L)
             machineStruct.SetField(Of Double)("MotorSpeed", 1500.0)
@@ -173,7 +157,7 @@ Module Program
                 ("Motor", motorDataTypeId, Nothing),
                 ("Machine", machineDataTypeId, Nothing))
 
-            Dim plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId)
+            Dim plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             plantStruct.SetField(Of String)("PlantName", "Factory_01")
             plantStruct.SetField(Of Integer)("ProductionCount", 42)
             plantStruct.SetField(Of Double)("Motor.Speed", 2200.0)
@@ -197,7 +181,7 @@ Module Program
                 ("Readings", DataTypeIds.Double, New UInteger() {4}),
                 ("Thresholds", DataTypeIds.Double, New UInteger() {2}))
 
-            Dim sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId)
+            Dim sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             sensorStruct.SetField(Of String)("Name", "TempSensor_01")
             sensorStruct.SetField(Of Double())("Readings", New Double() {23.5, 24.1, 22.8, 25.0})
             sensorStruct.SetField(Of Double())("Thresholds", New Double() {50.0, 75.0})
@@ -237,7 +221,7 @@ Module Program
                 ("FactoryName", DataTypeIds.String, Nothing),
                 ("Motors", motorDataTypeId, New UInteger() {2}))
 
-            Dim factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId)
+            Dim factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             factoryStruct.SetField(Of String)("FactoryName", "MainFactory")
             factoryStruct.SetField(Of Double)("Motors.[0].Speed", 1000.0)
             factoryStruct.SetField(Of Double)("Motors.[0].Temperature", 40.0)
@@ -259,7 +243,7 @@ Module Program
                 ("Label", DataTypeIds.String, Nothing),
                 ("Matrix", DataTypeIds.Double, New UInteger() {2, 3}))
 
-            Dim gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId)
+            Dim gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
             gridStruct.SetField(Of String)("Label", "HeatMap_01")
             gridStruct.SetField("Matrix", New Matrix(
                 New Double() {1.0, 2.0, 3.0, 4.0, 5.0, 6.0},
@@ -280,6 +264,96 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        ' ── Application Identity ──────────────────────────────────────────────
+        cfg.ApplicationName = "PLCcom Workshop 15 - Custom Types"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:15"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/custom-types"
+
+        ' ── ServerStatus/BuildInfo ────────────────────────────────────────────
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+
+        ' ── Endpoints ────────────────────────────────────────────────────────
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+
+        ' ── Security Policies ────────────────────────────────────────────────
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+
+        ' ── User Authentication ───────────────────────────────────────────────
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+
+        ' ── PKI Certificate Store ─────────────────────────────────────────────
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+
+        ' ── Endpoint Host Normalization ───────────────────────────────────────
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None                   = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay = 5
+
+        ' ── VendorServerInfo ──────────────────────────────────────────────────
+        cfg.VendorName = "My Company GmbH"
+        cfg.VendorProductName = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+
+        ' ── OperationLimits ───────────────────────────────────────────────────
+        cfg.MaxNodesPerRead = 1000
+        cfg.MaxNodesPerWrite = 1000
+        cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData           = 100
+        cfg.MaxNodesPerHistoryReadEvents         = 100
+        cfg.MaxNodesPerHistoryUpdateData         = 100
+        cfg.MaxNodesPerHistoryUpdateEvents       = 100
+        cfg.MaxNodesPerMethodCall                = 200
+        cfg.MaxNodesPerRegisterNodes             = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement            = 1000
+        cfg.MaxMonitoredItemsPerCall             = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module

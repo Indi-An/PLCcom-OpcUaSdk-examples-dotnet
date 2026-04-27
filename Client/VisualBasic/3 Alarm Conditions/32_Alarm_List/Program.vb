@@ -74,6 +74,9 @@ Public Class Program
              Console.WriteLine("║    * Maintain a live alarm list                              ║")
              Console.WriteLine("║    * Track alarm state changes                               ║")
              Console.WriteLine("║    * Identify alarms by ConditionId                          ║")
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -81,7 +84,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -91,7 +94,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Interlocked.Increment(counter), counter - 1).ToString() } => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Interlocked.Increment(counter), counter - 1).ToString() } => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -103,8 +106,8 @@ Public Class Program
                     'create a a SessionConfiguration with the selected endpoint and application name
                     Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(Assembly.GetEntryAssembly().GetName().Name, Endpoints(iNumberOfEndpoint))
 
-                    'enable auto connect functionality
-                    sessionConfiguration.AutoConnect = True
+                    'disable auto connect - we connect explicitly below
+                    sessionConfiguration.AutoConnect = False
 
                     'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
@@ -119,20 +122,20 @@ Public Class Program
                     AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                     AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                     AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-                    Console.WriteLine(client.GetSessionState().ToString())
+                    Console.Write("  Connecting ... ")
+                    client.Connect()
+                    Console.WriteLine("OK")
                     Console.WriteLine()
 
                     Try
                         Dim filter As EventFilter = client.CreateFilter(ObjectTypeIds.ConditionType)
-                        filter.WhereClause.Push(FilterOperator.OfType, ObjectTypeIds.ConditionType)
                         Dim subscription As Subscription = New Subscription()
                         subscription.PublishingInterval = 1000
-                        subscription.PublishingEnabled = False
+                        subscription.PublishingEnabled = True
                         subscription.DisplayName = "mySubsription"
 
                         'register subscription events
                         AddHandler subscription.StateChanged, AddressOf Subscription_StateChanged
-                        subscription.PublishingEnabled = False
 
                         'add subscription to client
                         client.AddSubscription(subscription)
@@ -176,11 +179,8 @@ Public Class Program
                         'apply changes
                         subscription.ApplyChanges()
 
-                        'enable publishing mode of subscription and set PublishingInterval
-                        subscription.SetPublishingMode(True)
-                        subscription.Modify()
                         client.Refresh_Conditions(subscription)
-                        Console.WriteLine("Start monitoring.....)")
+                        Console.WriteLine("Start monitoring...")
                     Catch ex As Exception
                         Console.WriteLine(ex)
                         Console.WriteLine()
@@ -241,7 +241,7 @@ Public Class Program
     End Sub
 
     Private Sub Subscription_StateChanged(ByVal subscription As Subscription, ByVal e As SubscriptionStateChangedEventArgs)
-        Console.WriteLine($"{Date.Now.ToLocalTime() } State of Subscription { UaClient.SubscriptionToString(subscription) }changed to => { e.Status.ToString()}")
+        Console.WriteLine($"{Date.Now.ToLocalTime() } State of Subscription { subscription.ToDisplayString() }changed to => { e.Status.ToString()}")
     End Sub
 
     Private Sub Client_MonitorNotification(ByVal monitoredItem As MonitoredItem, ByVal e As MonitoredItemNotificationEventArgs)
@@ -256,51 +256,51 @@ Public Class Program
             ' ignore for refresh start or end.
             If eventTypeId Is ObjectTypeIds.RefreshStartEventType OrElse eventTypeId Is ObjectTypeIds.RefreshEndEventType Then Return
 
-            'Create output string
-            Dim sb As StringBuilder = New StringBuilder()
-            sb.Append($"{Date.Now.ToLocalTime() } new Alarm notification:")
-            sb.Append(Environment.NewLine)
-            Dim actualAlarmcondition As ConditionState = client.GetConditionState(monitoredItem, notification)
-            sb.Append($"Source={actualAlarmcondition.SourceName.Value} ")
-            sb.Append($"Condition={actualAlarmcondition.ConditionName.Value} ")
-            sb.Append($"Severity={actualAlarmcondition.Severity.Value} ")
-            sb.Append($"Time={actualAlarmcondition.Time.Value.ToLocalTime()} ")
-            sb.Append($"State={actualAlarmcondition.EnabledState.EffectiveDisplayName.Value} ")
-            sb.Append($"Message={actualAlarmcondition.Message.Value} ")
-            sb.Append($"Comment={actualAlarmcondition.Comment.Value} ")
-            sb.Append(Environment.NewLine)
-            sb.Append("Current alarm list:")
-            sb.Append(Environment.NewLine)
             Dim condition As ConditionState = client.GetConditionState(monitoredItem, notification)
-            Dim ae As AlarmEvent = client.CreateAlarmEvent(condition.NodeId, condition)
+            If condition Is Nothing Then Return
 
-            'AlarmEventListe aufbauen und aktualisieren
+            Dim sb As StringBuilder = New StringBuilder()
+            sb.Append($"{Date.Now.ToLocalTime()} new Alarm notification:")
+            sb.Append(Environment.NewLine)
+            sb.Append($"  Source    = {condition.SourceName?.Value} ")
+            sb.Append($"  Condition = {condition.ConditionName?.Value} ")
+            sb.Append($"  Severity  = {condition.Severity?.Value} ")
+            sb.Append($"  Time      = {condition.Time?.Value.ToLocalTime()} ")
+            sb.Append($"  State     = {condition.EnabledState?.EffectiveDisplayName?.Value} ")
+            sb.Append($"  Message   = {condition.Message?.Value} ")
+            sb.Append($"  Retain    = {condition.Retain?.Value} ")
+            sb.Append(Environment.NewLine)
+
+            Dim ae As AlarmEvent = client.CreateAlarmEvent(condition.NodeId, condition)
             For i As Integer = 0 To notification.EventFields.Count - 1
                 Dim filtername As String = GetEventFilterMappings(CType(monitoredItem.Filter, EventFilter))(i).Replace("/", "")
                 Dim aei As AlarmEventItem = New AlarmEventItem(filtername, notification.EventFields(i).Value)
                 ae.AlarmEventItems.Add(filtername, aei)
             Next
 
-            Dim Identifier As String = $"NodeID:{condition.NodeId.ToString() } BrancheID:{ If(condition.BranchId IsNot Nothing, condition.BranchId.Value.ToString(), "")}"
+            Dim Identifier As String = $"NodeID:{condition.NodeId} BrancheID:{If(condition.BranchId?.Value IsNot Nothing, condition.BranchId.Value.ToString(), "")}"
 
-            'Update Alarm cache
-            If mAlarmEventCache.ContainsKey(Identifier) Then
-                mAlarmEventCache(Identifier) = ae
-            Else
-                mAlarmEventCache.Add(Identifier, ae)
-            End If
+            ' Retain=false means alarm is resolved - remove from list
+            Dim retain As Boolean = If(condition.Retain?.Value, False)
+            SyncLock mAlarmEventCache
+                If retain Then
+                    mAlarmEventCache(Identifier) = ae
+                Else
+                    mAlarmEventCache.Remove(Identifier)
+                End If
+            End SyncLock
 
+            sb.Append("Current alarm list:")
+            sb.Append(Environment.NewLine)
             For Each alarmEvent As AlarmEvent In GetEventCache(True)
                 Dim alarmCondition As ConditionState = alarmEvent.GetConditionState()
-                sb.Append(String.Format("Source={0} ", alarmCondition.SourceName.Value))
-                sb.Append(String.Format("Condition={0} ", alarmCondition.ConditionName.Value))
-                sb.Append(String.Format("Severity={0} ", alarmCondition.Severity.Value))
-                sb.Append(String.Format("Time={0} ", alarmCondition.Time.Value.ToLocalTime()))
-                sb.Append(String.Format("State={0} ", alarmCondition.EnabledState.EffectiveDisplayName.Value))
-                sb.Append(String.Format("Message={0} ", alarmCondition.Message.Value))
-                sb.Append(String.Format("Comment={0} ", alarmCondition.Comment.Value))
+                sb.Append($"  [{alarmCondition.ConditionName?.Value}] " &
+                          $"Source={alarmCondition.SourceName?.Value} " &
+                          $"Severity={alarmCondition.Severity?.Value} " &
+                          $"Message={alarmCondition.Message?.Value}")
                 sb.Append(Environment.NewLine)
             Next
+            If Not GetEventCache(False).Any() Then sb.AppendLine("  (no active alarms)")
 
             sb.Append(Environment.NewLine)
             Console.WriteLine(sb.ToString())

@@ -33,7 +33,8 @@
 '   * How to call a method and evaluate the result
 '   * How to read output arguments from the CallMethodResult
 '
-' Target server: opc.tcp://localhost:48410
+' Required server: Server Workshop 13 (Methods)
+' Target server:   opc.tcp://localhost:48410
 ' ==============================================================================
 
 Imports PLCcom.Opc.Ua
@@ -57,7 +58,6 @@ Public Class Program
 
          Console.WriteLine()
 
-
              Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
              Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 24: Simple Method Calls ║")
              Console.WriteLine("║                                                              ║")
@@ -69,6 +69,9 @@ Public Class Program
              Console.WriteLine("║    * Encode structured input with BinaryEncoder              ║")
              Console.WriteLine("║    * Create ExtensionObjects for method input                ║")
              Console.WriteLine("║    * Call a method and evaluate the result                   ║")
+             Console.WriteLine("║                                                              ║")
+             Console.WriteLine("║  Required server: Server Workshop 13 (Methods)               ║")
+             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
              Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
              Console.WriteLine()
 
@@ -76,7 +79,7 @@ Public Class Program
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -86,7 +89,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")
@@ -102,7 +105,6 @@ Public Class Program
                     'output certificate store path
                     Console.WriteLine($"Info: Sessionconfiguration created, certificate store path => { sessionConfiguration.CertificateStorePath}")
 
-
                     'Create a new opc client instance and pass your license information
                     Using client As UaClient = New UaClient(LicenseUserName, LicenseSerial, sessionConfiguration)
                         Console.WriteLine($"Info: license state => { client.GetLicenceMessage()}")
@@ -114,7 +116,6 @@ Public Class Program
                         AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                         AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                         AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
-
 
                         ' 
                         ' let´s starting a method call, step by step
@@ -157,17 +158,39 @@ Public Class Program
                         extensionObjectWithInputArguments.Body = argumentByteArray
 
                         'set type of structure, create a new ExpandedNodeId by name and namespace
-                        extensionObjectWithInputArguments.TypeId = New ExpandedNodeId("DataStructure_One", Convert.ToUInt16(3))
+                        extensionObjectWithInputArguments.TypeId = New ExpandedNodeId("DataStructure_One", Convert.ToUInt16(2))
 
                         'create your InputArguments with extensionObject
                         Dim inputArguments As VariantCollection = New VariantCollection()
                         inputArguments.Add(New [Variant](extensionObjectWithInputArguments))
 
-                        'create a new NodeId for the Object to which the method should be applied by name and namespace
-                        Dim objectNode As NodeId = New NodeId("myObjectNode", 3)
+                        'resolve object and method via browse
+                        Dim objectNode As NodeId = client.GetNodeIdByPath("Objects.Plant.myObjectNode")
+                        If objectNode Is Nothing Then
+                            Console.WriteLine("myObjectNode not found - is Server Workshop 13 running?")
+                            Return
+                        End If
 
-                        'create a new NodeId for the Method by name and namespace
-                        Dim methodNode As NodeId = New NodeId("myMethodNode", 3)
+                        Dim methodNode As NodeId = Nothing
+                        Dim browseDesc As New BrowseDescription With {
+                            .NodeId = objectNode,
+                            .BrowseDirection = BrowseDirection.Forward,
+                            .ReferenceTypeId = ReferenceTypeIds.HasComponent,
+                            .IncludeSubtypes = True,
+                            .NodeClassMask = CUInt(NodeClass.Method),
+                            .ResultMask = CUInt(BrowseResultMask.All)
+                        }
+                        Dim refs = client.BrowseFull(New BrowseDescriptionCollection From {browseDesc})
+                        For Each r In refs
+                            If r.BrowseName.Name = "myMethodNode" Then
+                                methodNode = ExpandedNodeId.ToNodeId(r.NodeId, client.GetNamespaceUris())
+                                Exit For
+                            End If
+                        Next
+                        If methodNode Is Nothing Then
+                            Console.WriteLine("myMethodNode not found under myObjectNode")
+                            Return
+                        End If
 
                         'create a CallMethodRequest instance and pass your arguments
                         Dim request As CallMethodRequest = New CallMethodRequest()
@@ -177,7 +200,6 @@ Public Class Program
 
                         'call your method 
                         Dim result As CallMethodResult = client.Call(request)
-
 
                         'finaly evaluate your results,
                         If StatusCode.IsGood(result.StatusCode) Then

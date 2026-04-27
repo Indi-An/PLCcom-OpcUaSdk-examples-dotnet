@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -68,14 +68,17 @@ Public Class Program
              Console.WriteLine("║    * Read all attributes (NodeClass through AccessLevelEx)   ║")
              Console.WriteLine("║    * Interpret attribute values and data types               ║")
              Console.WriteLine("║    * Handle BadAttributeIdInvalid for unsupported attrs      ║")
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
-             Console.WriteLine()
+             Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)          ║")
+            Console.WriteLine("║  opc.tcp://localhost:48410                                    ║")
+            Console.WriteLine("╚═══════════════════════════════════════════════════════════════╝")
+            Console.WriteLine()
 
             'TODO
             'Submit your license information from your license e-mail
             Dim LicenseUserName As String = "<Enter your UserName here>"
             Dim LicenseSerial As String = "<Enter your Serial here>"
-            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), 60000)
+            Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
             Endpoints = UaClient.SortEndpointsBySecurityLevel(Endpoints)
@@ -85,7 +88,7 @@ Public Class Program
                 Dim counter As Integer = 0
 
                 For Each Endpoint As EndpointDescription In Endpoints
-                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { UaClient.EndpointToString(Endpoint)}")
+                    Console.WriteLine($"{Math.Min(Threading.Interlocked.Increment(counter), counter - 1).ToString()} => { Endpoint.ToDisplayString()}")
                 Next
 
                 Console.WriteLine("please enter index of desired endpoint")

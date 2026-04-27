@@ -65,6 +65,9 @@ class Program
         Console.WriteLine("║    * Browse from ObjectsFolder (i=85)                        ║");
         Console.WriteLine("║    * Read NodeId, NodeClass, BrowseName, DisplayName         ║");
         Console.WriteLine("║    * BrowseFull handles continuation points automatically    ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -82,7 +85,7 @@ class Program
             Console.WriteLine("  Discovering endpoints...");
             Console.WriteLine();
 
-            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), 60000);
+            EndpointDescriptionCollection endpoints = UaClient.GetEndpoints(new Uri(serverUrl), certificateValidator: CertificateValidationHandler);
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints);
 
             if (endpoints.Count == 0)
@@ -95,7 +98,7 @@ class Program
             Console.WriteLine($"  {endpoints.Count} endpoint(s) found:");
             Console.WriteLine();
             for (int i = 0; i < endpoints.Count; i++)
-                Console.WriteLine($"  [{i}] {UaClient.EndpointToString(endpoints[i])}");
+                Console.WriteLine($"  [{i}] {endpoints[i].ToDisplayString()}");
 
             Console.WriteLine();
             Console.Write("  Please enter index of desired endpoint: ");
@@ -117,7 +120,7 @@ class Program
             {
                 Console.WriteLine("  License: " + client.GetLicenceMessage());
 
-                client.CertificateValidation += (sender, e) => { e.Accept = true; };
+                client.CertificateValidation += CertificateValidationHandler;
                 client.ServerConnected += (s, e) =>
                     Console.WriteLine($"  [Connected] {DateTime.Now:HH:mm:ss}");
                 client.ServerConnectionLost += (s, e) =>
@@ -186,5 +189,13 @@ class Program
         Console.WriteLine();
         Console.WriteLine("  Press ENTER to exit.");
         Console.ReadLine();
+    }
+    void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
+    {
+        // Called when the server presents its certificate - both during opc.https
+        // discovery (TLS) and when a security policy other than None is used.
+        // Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        e.Accept = true;
+        Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}");
     }
 }

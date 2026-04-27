@@ -28,12 +28,18 @@ Imports System.Collections.Generic
 ' PLCcom OPC UA Server SDK - Workshop 13: Methods
 '
 ' OPC UA Methods are callable functions in the server's address space.
-' A client can invoke a method by sending a Call service request.
+' A client can invoke a method by sending a Call service request - similar
+' to calling a remote procedure (RPC). Methods can have typed input
+' arguments and return typed output arguments.
 '
-' This workshop demonstrates:
+' What you will learn:
 '   * How to create a method without arguments (Reset)
 '   * How to create a method with input and output arguments (Add, Multiply)
 '   * How to create a method that modifies server-side state (SetTemperature)
+'   * How to receive a structured ExtensionObject argument (myMethodNode)
+'     -> used by Client Workshop 24 (Simple Method Calls)
+'   * How to receive nested structured arguments (myObjectNode_Advanced)
+'     -> used by Client Workshop 25 (Advanced Calls with Structs)
 '
 ' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
@@ -48,11 +54,18 @@ Module Program
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
         Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 13: Methods             ║")
         Console.WriteLine("║                                                              ║")
-        Console.WriteLine("║  This example creates four methods:                          ║")
+        Console.WriteLine("║  Methods are callable functions in the address space.        ║")
+        Console.WriteLine("║  Clients invoke them via the OPC UA Call service.            ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  This example creates six methods:                           ║")
         Console.WriteLine("║    Reset()                   - resets CycleCount to 0        ║")
         Console.WriteLine("║    Add(A, B) -> Sum           - returns A + B                ║")
         Console.WriteLine("║    Multiply(A, B) -> Product  - returns A x B                ║")
         Console.WriteLine("║    SetTemperature(value)      - updates a server variable    ║")
+        Console.WriteLine("║    myMethodNode(DataStructure_One) - for Client Workshop 24  ║")
+        Console.WriteLine("║    myMethodNode(nested structs)     - for Client Workshop 25 ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  In UA Expert: right-click a method -> Call...               ║")
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
@@ -100,11 +113,11 @@ Module Program
             ' =================================================================
             ' Step 2: Create the address space with variables
             ' =================================================================
-            Dim plant = server.CreateFolder("Plant")
-            Dim machine = server.CreateFolder(plant, "Machine1")
+            Dim plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim machine = server.CreateFolder(plant, "Machine1", UaRolePermissions.WITHOUT_RESTRICTIONS)
 
-            Dim counter = server.CreateVariable(Of Long)(machine, "CycleCount", initialValue:=0L)
-            Dim temp = server.CreateVariable(Of Double)(machine, "Temperature", initialValue:=22.0)
+            Dim counter = server.CreateVariable(Of Long)(machine, "CycleCount", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=0L)
+            Dim temp = server.CreateVariable(Of Double)(machine, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=22.0)
 
             Console.WriteLine("-- Address space ------------------------------------------------")
             Console.WriteLine($"  Int64   {counter.Path,-40} {counter.NodeId}  = 0")
@@ -121,17 +134,18 @@ Module Program
                              counter.Value = 0L
                              Console.WriteLine("  [METHOD] Reset() -> CycleCount = 0")
                              Return ServiceResult.Good
-                         End Function)
+                         End Function, UaRolePermissions.WITHOUT_RESTRICTIONS)
 
             ' -- Method 2: Add (two inputs, one output) ------------------------
             server.CreateMethod(machine, "Add",
-                handler:=Function(ctx, method, objectId, inputArgs, outputArgs)
+                Function(ctx, method, objectId, inputArgs, outputArgs)
                              Dim a As Double = CDbl(inputArgs(0))
                              Dim b As Double = CDbl(inputArgs(1))
                              outputArgs(0) = a + b
                              Console.WriteLine($"  [METHOD] Add({a}, {b}) = {a + b}")
                              Return ServiceResult.Good
                          End Function,
+                UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "A", .DataType = DataTypeIds.Double,
                         .ValueRank = ValueRanks.Scalar, .Description = "First operand"},
@@ -145,13 +159,14 @@ Module Program
 
             ' -- Method 3: Multiply (two inputs, one output) -------------------
             server.CreateMethod(machine, "Multiply",
-                handler:=Function(ctx, method, objectId, inputArgs, outputArgs)
+                Function(ctx, method, objectId, inputArgs, outputArgs)
                              Dim a As Double = CDbl(inputArgs(0))
                              Dim b As Double = CDbl(inputArgs(1))
                              outputArgs(0) = a * b
                              Console.WriteLine($"  [METHOD] Multiply({a}, {b}) = {a * b}")
                              Return ServiceResult.Good
                          End Function,
+                UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "A", .DataType = DataTypeIds.Double,
                         .ValueRank = ValueRanks.Scalar, .Description = "First factor"},
@@ -165,12 +180,13 @@ Module Program
 
             ' -- Method 4: SetTemperature (modifies server state) --------------
             server.CreateMethod(machine, "SetTemperature",
-                handler:=Function(ctx, method, objectId, inputArgs, outputArgs)
+                Function(ctx, method, objectId, inputArgs, outputArgs)
                              Dim newTemp As Double = CDbl(inputArgs(0))
                              temp.Value = newTemp
                              Console.WriteLine($"  [METHOD] SetTemperature({newTemp:F1}) -> Temperature updated")
                              Return ServiceResult.Good
                          End Function,
+                UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "NewTemperature", .DataType = DataTypeIds.Double,
                         .ValueRank = ValueRanks.Scalar, .Description = "New temperature value in Celsius"}
@@ -183,6 +199,123 @@ Module Program
             Console.WriteLine("  SetTemperature(value)      -> updates Temperature variable")
             Console.WriteLine()
 
+            ' =================================================================
+            ' Step 4: myObjectNode / myMethodNode for Client Workshop 24
+            ' =================================================================
+            ' Client Workshop 24 calls a method that receives a structured argument
+            ' encoded as an ExtensionObject (BinaryEncoder). The structure is:
+            '   DataStructure_One = { int, string, int, int, string }
+            Dim myObjectNode = server.CreateObject(plant.NodeId, "myObjectNode", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Console.WriteLine($"  myObjectNode NodeId = {myObjectNode.NodeId}")
+
+            server.CreateMethod(myObjectNode.NodeId, "myMethodNode",
+                Function(ctx, method, objectId, inputArgs, outputArgs)
+                             Try
+                                 Dim ext = TryCast(inputArgs(0), ExtensionObject)
+                                 Dim body = TryCast(ext?.Body, Byte())
+                                 If body IsNot Nothing Then
+                                     Dim ctx2 As New ServiceMessageContext(Nothing)
+                                     Using decoder As New BinaryDecoder(body, ctx2)
+                                         Dim v1 As Integer = decoder.ReadInt32("")
+                                         Dim v2 As String = decoder.ReadString("")
+                                         Dim v3 As Integer = decoder.ReadInt32("")
+                                         Dim v4 As Integer = decoder.ReadInt32("")
+                                         Dim v5 As String = decoder.ReadString("")
+                                         Console.WriteLine($"  [METHOD] myMethodNode called: {v1}, {v2}, {v3}, {v4}, {v5}")
+                                         outputArgs(0) = $"Received: {v1} | {v2} | {v3} | {v4} | {v5}"
+                                     End Using
+                                 Else
+                                     outputArgs(0) = "No input received"
+                                 End If
+                             Catch ex As Exception
+                                 Console.WriteLine($"  [METHOD] myMethodNode error: {ex.Message}")
+                                 outputArgs(0) = $"Error: {ex.Message}"
+                             End Try
+                             Return ServiceResult.Good
+                         End Function,
+                UaRolePermissions.WITHOUT_RESTRICTIONS,
+                inputArgs:=New Argument() {
+                    New Argument With {.Name = "DataStructure_One", .DataType = DataTypeIds.Structure,
+                        .ValueRank = ValueRanks.Scalar, .Description = "Encoded struct: int, string, int, int, string"}
+                },
+                outputArgs:=New Argument() {
+                    New Argument With {.Name = "Result", .DataType = DataTypeIds.String,
+                        .ValueRank = ValueRanks.Scalar, .Description = "Confirmation string"}
+                })
+
+            Console.WriteLine("-- myObjectNode (for Client Workshop 24) ------------------------")
+            Console.WriteLine("  myMethodNode(DataStructure_One) -> Result")
+            Console.WriteLine("  Input: ExtensionObject with BinaryEncoded { int, string, int, int, string }")
+            Console.WriteLine()
+
+            ' =================================================================
+            ' Step 5: myObjectNode_Advanced / myMethodNode for Client Workshop 25
+            ' =================================================================
+            ' Client Workshop 25 calls a method with a nested structure:
+            '   DataStructure_One = { int, string, DataStructure_Two, int, DataStructure_Two[], int }
+            '   DataStructure_Two = { int, string, int }
+            Dim myObjectNodeAdv = server.CreateObject(plant.NodeId, "myObjectNode_Advanced", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Console.WriteLine($"  myObjectNode_Advanced NodeId = {myObjectNodeAdv.NodeId}")
+
+            server.CreateMethod(myObjectNodeAdv.NodeId, "myMethodNode",
+                Function(ctx, method, objectId, inputArgs, outputArgs)
+                             Try
+                                 Dim ext = TryCast(inputArgs(0), ExtensionObject)
+                                 Dim body = TryCast(ext?.Body, Byte())
+                                 If body IsNot Nothing Then
+                                     Dim ctx2 As New ServiceMessageContext(Nothing)
+                                     Using decoder As New BinaryDecoder(body, ctx2)
+                                         Dim v1 As Integer = decoder.ReadInt32("")
+                                         Dim v2 As String = decoder.ReadString("")
+
+                                         ' embedded DataStructure_Two
+                                         Dim embExt = decoder.ReadExtensionObject("")
+                                         Dim embSummary As String = "(empty)"
+                                         Dim embBody = TryCast(embExt?.Body, Byte())
+                                         If embBody IsNot Nothing Then
+                                             Using d2 As New BinaryDecoder(embBody, ctx2)
+                                                 Dim e1 As Integer = d2.ReadInt32("")
+                                                 Dim e2 As String = d2.ReadString("")
+                                                 Dim e3 As Integer = d2.ReadInt32("")
+                                                 embSummary = $"{e1},{e2},{e3}"
+                                             End Using
+                                         End If
+
+                                         Dim v3 As Integer = decoder.ReadInt32("")
+
+                                         ' array of DataStructure_Two
+                                         Dim arr = decoder.ReadExtensionObjectArray("")
+                                         Dim arrCount As Integer = If(arr IsNot Nothing, arr.Count, 0)
+
+                                         Dim v4 As Integer = decoder.ReadInt32("")
+
+                                         Console.WriteLine($"  [METHOD_ADV] myMethodNode: v1={v1} v2={v2} emb=[{embSummary}] v3={v3} arr={arrCount} items v4={v4}")
+                                         outputArgs(0) = $"Received: {v1} | {v2} | emb=[{embSummary}] | v3={v3} | arr={arrCount} | v4={v4}"
+                                     End Using
+                                 Else
+                                     outputArgs(0) = "No input received"
+                                 End If
+                             Catch ex As Exception
+                                 Console.WriteLine($"  [METHOD_ADV] error: {ex.Message}")
+                                 outputArgs(0) = $"Error: {ex.Message}"
+                             End Try
+                             Return ServiceResult.Good
+                         End Function,
+                UaRolePermissions.WITHOUT_RESTRICTIONS,
+                inputArgs:=New Argument() {
+                    New Argument With {.Name = "DataStructure_One", .DataType = DataTypeIds.Structure,
+                        .ValueRank = ValueRanks.Scalar, .Description = "Nested struct: int, string, DataStructure_Two, int, DataStructure_Two[], int"}
+                },
+                outputArgs:=New Argument() {
+                    New Argument With {.Name = "Result", .DataType = DataTypeIds.String,
+                        .ValueRank = ValueRanks.Scalar, .Description = "Confirmation string"}
+                })
+
+            Console.WriteLine("-- myObjectNode_Advanced (for Client Workshop 25) ---------------")
+            Console.WriteLine("  myMethodNode(DataStructure_One) -> Result")
+            Console.WriteLine("  Input: nested struct { int, string, DataStructure_Two, int, DataStructure_Two[], int }")
+            Console.WriteLine()
+
             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
             Console.WriteLine("║  Server is running on: opc.tcp://localhost:48410             ║")
             Console.WriteLine("║                                                              ║")
@@ -191,6 +324,11 @@ Module Program
             Console.WriteLine("║  * Right-click Reset -> Call                                 ║")
             Console.WriteLine("║  * Right-click Add -> Call, enter A=10 and B=20              ║")
             Console.WriteLine("║  * Call SetTemperature(42.5) and watch Temperature change    ║")
+            Console.WriteLine("║  * Subscribe to Temperature, then call SetTemperature again  ║")
+            Console.WriteLine("║                                                              ║")
+            Console.WriteLine("║  Use Client Workshop 24 to call myMethodNode with a          ║")
+            Console.WriteLine("║  structured DataStructure_One argument.                      ║")
+            Console.WriteLine("║  Use Client Workshop 25 for nested struct arguments.         ║")
             Console.WriteLine("║                                                              ║")
             Console.WriteLine("║  Press ENTER to exit.                                        ║")
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
@@ -198,6 +336,73 @@ Module Program
 
         End Using
 
+    End Sub
+
+
+    ' ==========================================================================
+    ' Helper: CreateConfig
+    ' ==========================================================================
+    ' Returns the server configuration. Adjust to your needs.
+    Private Function CreateConfig() As UaServerConfiguration
+        Dim cfg As New UaServerConfiguration
+        cfg.ApplicationName = "PLCcom Workshop 13 - Methods"
+        cfg.ApplicationUri  = "urn:localhost:PLCcom:Workshop:13"
+        cfg.ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/"
+        cfg.NamespaceUri    = "http://indi-an.com/opcua/workshop/methods"
+        cfg.ManufacturerName = "My Company GmbH"
+        cfg.ProductName      = "My OPC UA Server"
+        cfg.SoftwareVersion  = "1.0.0"
+        cfg.BuildNumber      = "42"
+        cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
+        cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
+        cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
+        cfg.CertificateStorePath = ".\pki"
+        cfg.CertificateLifetimeInMonths = 60
+        cfg.AutoAcceptUntrustedCertificates = False
+        ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
+        ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
+        ' None = no normalization, behavior depends on DNS and network settings
+        cfg.EndpointHostMode = EndpointHostMode.AsConfigured
+        cfg.MaxSessionCount = 100
+        cfg.ShutdownDelay   = 5
+        cfg.VendorName           = "My Company GmbH"
+        cfg.VendorProductName    = "My OPC UA Server"
+        cfg.VendorProductVersion = "1.0.0"
+        cfg.MaxNodesPerRead = 1000 : cfg.MaxNodesPerWrite = 1000 : cfg.MaxNodesPerBrowse = 1000
+        cfg.MaxNodesPerHistoryReadData = 100 : cfg.MaxNodesPerHistoryReadEvents = 100
+        cfg.MaxNodesPerHistoryUpdateData = 100 : cfg.MaxNodesPerHistoryUpdateEvents = 100
+        cfg.MaxNodesPerMethodCall = 200 : cfg.MaxNodesPerRegisterNodes = 1000
+        cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
+        cfg.MaxNodesPerNodeManagement = 1000 : cfg.MaxMonitoredItemsPerCall = 1000
+        Return cfg
+    End Function
+
+    ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+    Private Sub PrintConfig(config As UaServerConfiguration)
+        Console.WriteLine("-- Active Server Configuration ------------------------------")
+        Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
+        Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
+        Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
+        Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
+        Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
+        Console.WriteLine()
+        Console.WriteLine("  Endpoints:")
+        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        Console.WriteLine()
+                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  VendorServerInfo:")
+        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits:")
+        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
+        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
+        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
     End Sub
 
 End Module
