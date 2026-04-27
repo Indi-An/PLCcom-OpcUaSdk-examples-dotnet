@@ -21,6 +21,21 @@ client.WriteValue(nodeId, 23.5);
 
 This makes your code **readable, maintainable, and independent of server-specific NodeId assignments**. Of course, classic NodeId-based access is fully supported too.
 
+---
+
+## Licensing Information
+
+**Examples License:**
+All examples in this repository are released under the **MIT License**. You are free to use, modify, and distribute them according to the MIT license terms.
+
+**PLCcom Library License:**
+The **PLCcom OPC UA SDK** itself is proprietary software and is **NOT** included under the MIT license. To use the library in your own projects you must acquire an appropriate license and accept the EULA. More information: [https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/)
+
+**Trial License:**
+A free trial license is available at the [PLCcom download page](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/).
+
+---
+
 ## Overview of PLCcom.Opc.Ua.Sdk
 
 PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for .NET software developers to provide convenient client and server access for OPC UA (Open Platform Communications Unified Architecture). The libraries are 100% .NET assemblies and can be directly linked as a NuGet package — no API calls necessary.
@@ -42,6 +57,8 @@ PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for
 - Extensive tutorials for C# and Visual Basic included
 
 For a full list of supported features and detailed descriptions, refer to the official documentation [here](https://www.indi-an.com/help_opc_ua_client_sdk/net/help/html/R_Project_PLCcom_Opc_Ua_Sdk_Documentation.htm).
+
+---
 
 ## Workshop Overview
 
@@ -139,21 +156,14 @@ Many client workshops are designed to work with a specific server workshop. Star
 | 61 Simple Events | 61 Simple Events | Events |
 | 71 Reverse Connect | 71 Reverse Connect | Firewall traversal |
 
+---
+
 ## Requirements
 
 - .NET 10.0
 - Visual Studio 2022 or newer (recommended VS2026)
 
-## Licensing Information
-
-**Examples License:**
-- All examples provided in this repository are released under the **MIT License**. You are free to use, modify, and distribute these examples according to the terms of the MIT license.
-
-**PLCcom Library License:**
-- **PLCcom.Opc.Ua.Sdk** itself is proprietary software and is **NOT** included under the MIT license. To use the PLCcom library in your own projects, you must acquire an appropriate license and accept the EULA for the PLCcom.Opc.Ua.Sdk library. More information about purchasing a license can be found [here](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/).
-
-**Test License:**
-- For execution, a (test) license is required. Users can request a trial license themselves via the PLCcom.Opc.Ua.Sdk [download website](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/).
+---
 
 ## Getting Started
 
@@ -164,12 +174,16 @@ Many client workshops are designed to work with a specific server workshop. Star
 Install-Package PLCcom.Opc.Ua.Sdk
 ```
 
+---
+
 ## ⚠️ Important Safety Notice
 
 The examples in this repository are **for demonstration purposes only** and **must _not_** be used in production, safety‑critical, or industrial environments without your own checks.
 **Use at your own risk!** Deploying these examples in real systems may lead to personal injury, property damage, or environmental harm and is **strictly prohibited**.
 
 The author disclaims all liability—direct, indirect, incidental, or consequential—arising from the use or misuse of these examples.
+
+---
 
 ##### Trademark Information: #####
 All product names, company names, and trademarks referenced in this repository are trademarks or registered trademarks of their respective owners. There is no affiliation between the mentioned trademarks or their owners and Indi.An GmbH. Any mention of trademarks is solely for reference purposes regarding usage and application.
