@@ -66,13 +66,14 @@
 using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Server.Sdk;
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Threading;
 
 // -- License -------------------------------------------------------------------
 // TODO: Replace with your license credentials from your license e-mail
 string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial   = "<Enter your Serial here>";
+string LicenseSerial = "<Enter your Serial here>";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 11: Simple Server       ║");
@@ -105,19 +106,56 @@ PrintConfig(config);
 using var server = new UaServer(LicenseUserName, LicenseSerial);
 
 // Accept all client certificates automatically.
-// WARNING: Do NOT use this in production! Use the PKI trust store instead.
+// WARNING: Do NOT use this in production! Either implement your own validation
+// logic here (inspect e.Certificate and e.Error, then set e.Accept = true or false),
+// or remove this handler entirely -- the SDK will then automatically validate
+// certificates against the PKI trust store (pki/trusted/certs/).
 server.CertificateValidation += (sender, e) => e.Accept = true;
 
-// ValuesWritten fires whenever an OPC UA client writes one or more values.
-// Each item in e.Items contains:
-//   Path     — dot-separated browse path (e.g. "Objects.Plant.Line1.Machine1.RPM")
-//   NodeId   — the OPC UA NodeId (e.g. ns=2;i=6)
-//   Value    — the value written by the client
-// This is the primary way to react to client writes from your application code.
+
+// WriteValidation — called BEFORE any client write is committed to the address space.
+// All internal checks (AccessLevel, DataType, Permissions) have already passed.
+// The handler receives ALL items of the write request as a batch.
+// Set item.StatusCode to any Bad_* value to reject that specific item.
+// If not handled or StatusCode remains Good, the write proceeds normally.
+//
+// You can also MODIFY the value before it is written by setting item.Value.
+// The modified value is then stored in the address space instead of the original.
+//
+// !! IMPORTANT — PERFORMANCE WARNING !!
+// This handler runs synchronously on the server's write thread.
+// Any blocking operation (device I/O, database, slow network) will stall
+// the entire write request and can block other clients as well.
+//
+// If you need to forward the value to a device, prefer one of these patterns:
+//   a) Accept immediately (Good) and forward asynchronously via Task.Run or a queue.
+//      The OPC UA client gets a fast response; the device update happens in the background.
+//   b) If you must wait for the device, always use a short timeout (e.g. 500 ms)
+//      and return BadTimeout or BadNoCommunication if the device does not respond in time.
+//
+// Never await or block indefinitely inside this handler.
+server.WriteValidation += (s, e) =>
+{
+    foreach (var item in e.Items)
+    {
+        // Example: accept immediately and forward to device asynchronously
+        // Task.Run(() => plc.WriteValue(item.Path, item.Value));
+        //
+        // Example: forward synchronously with timeout, reject on failure
+        // bool ok = plc.WriteValue(item.Path, item.Value, timeoutMs: 500);
+        // if (!ok) item.StatusCode = StatusCodes.BadNoCommunication;
+        item.StatusCode = StatusCodes.Good;
+        Console.WriteLine($"  >> WriteValidation: {item.Path} = {item.Value}");
+    }
+};
+
+// ValuesWritten — called AFTER a successful write. The client already received Good.
+// Use this for logging, synchronization, or triggering side effects.
+// Note: If WriteValidation rejects an item, ValuesWritten does NOT fire for that item.
 server.ValuesWritten += (s, e) =>
 {
     foreach (var item in e.Items)
-        Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}");
+        Console.WriteLine($"  << Written: {item.Path} ({item.NodeId}) = {item.Value}");
 };
 
 Console.Write("Starting server ... ");
@@ -237,7 +275,7 @@ while (true)
 // with a description and the default value. Adjust to your needs.
 static UaServerConfiguration CreateConfig()
 {
-    return new UaServerConfiguration
+    var config = new UaServerConfiguration
     {
         // ── Application Identity ──────────────────────────────────────────────
         // ApplicationName: human-readable name shown to connecting clients
@@ -296,28 +334,16 @@ static UaServerConfiguration CreateConfig()
             new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
         },
 
-        // ── PKI Certificate Store ─────────────────────────────────────────────
-        // Root path for the PKI directory stores.
-        // Sub-folders own/, trusted/, rejected/, issuers/ are created automatically.
-        // Default: .\pki
-        CertificateStorePath = @".\pki",
-
-        // CertificateSubjectName: subject of the auto-generated server certificate.
-        // Null = auto-generate as "CN=<ApplicationName>, DC=<hostname>".
-        // CertificateSubjectName = "CN=MyServer, DC=myhost",
-
-        // CertificateLifetimeInMonths: validity period of the auto-generated certificate.
-        // Default: 60 months (5 years).
-        CertificateLifetimeInMonths = 60,
-
         // AutoAcceptUntrustedCertificates: skip client certificate validation.
         // WARNING: only for development/testing — never use in production!
         // Default: false.
         AutoAcceptUntrustedCertificates = false,
+
         // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
         // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
         // None = no normalization, behavior depends on DNS and network settings
         EndpointHostMode = EndpointHostMode.AsConfigured,
+
         MaxSessionCount = 100,
 
         // ShutdownDelay: seconds the server waits for clients to disconnect
@@ -333,10 +359,6 @@ static UaServerConfiguration CreateConfig()
         // discover this server via FindServers without knowing its URL.
         // Default: false.
         RegisterWithDiscoveryServer = false,
-
-        // DiscoveryRegistrationInterval: re-registration interval in milliseconds.
-        // Only used when RegisterWithDiscoveryServer = true. Default: 30000.
-        // DiscoveryRegistrationInterval = 30000,
 
         // DiscoveryServerUrl: URL of the LDS to register with.
         // Only used when RegisterWithDiscoveryServer = true.
@@ -356,19 +378,72 @@ static UaServerConfiguration CreateConfig()
         // All 12 nodes are always present in the address space.
         // Clients read these values to size their request batches correctly.
         // 0 = no limit imposed by this server (not recommended for production).
-        MaxNodesPerRead                      = 1000,  // max nodes per Read request
-        MaxNodesPerWrite                     = 1000,  // max nodes per Write request
-        MaxNodesPerBrowse                    = 1000,  // max nodes per Browse/BrowseNext
-        MaxNodesPerHistoryReadData           = 100,   // max nodes per HistoryRead (data)
-        MaxNodesPerHistoryReadEvents         = 100,   // max nodes per HistoryRead (events)
-        MaxNodesPerHistoryUpdateData         = 100,   // max nodes per HistoryUpdate (data)
-        MaxNodesPerHistoryUpdateEvents       = 100,   // max nodes per HistoryUpdate (events)
-        MaxNodesPerMethodCall                = 200,   // max nodes per Method Call
-        MaxNodesPerRegisterNodes             = 1000,  // max nodes per RegisterNodes
-        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000, // max nodes per TranslateBrowsePaths
-        MaxNodesPerNodeManagement            = 1000,  // max nodes per AddNodes/DeleteNodes
-        MaxMonitoredItemsPerCall             = 1000,  // max items per CreateMonitoredItems
+        MaxNodesPerRead                          = 1000,  // max nodes per Read request
+        MaxNodesPerWrite                         = 1000,  // max nodes per Write request
+        MaxNodesPerBrowse                        = 1000,  // max nodes per Browse/BrowseNext
+        MaxNodesPerHistoryReadData               = 100,   // max nodes per HistoryRead (data)
+        MaxNodesPerHistoryReadEvents             = 100,   // max nodes per HistoryRead (events)
+        MaxNodesPerHistoryUpdateData             = 100,   // max nodes per HistoryUpdate (data)
+        MaxNodesPerHistoryUpdateEvents           = 100,   // max nodes per HistoryUpdate (events)
+        MaxNodesPerMethodCall                    = 200,   // max nodes per Method Call
+        MaxNodesPerRegisterNodes                 = 1000,  // max nodes per RegisterNodes
+        MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,  // max nodes per TranslateBrowsePaths
+        MaxNodesPerNodeManagement                = 1000,  // max nodes per AddNodes/DeleteNodes
+        MaxMonitoredItemsPerCall                 = 1000,  // max items per CreateMonitoredItems
     };
+
+    // ── PKI Certificate Store ─────────────────────────────────────────────────
+    // Build the certificate store: one Application cert for the OPC UA secure
+    // channel, plus one HTTPS cert per opc.https:// hostname derived from the
+    // base addresses.
+    //
+    // UaServerCertificateStore.Load() tries to load all certs from disk.
+    // Certificates that are missing or cannot be read remain in the store
+    // but are marked as not ready (IsReady = false).
+    //
+    // GetMissingOrExpired() returns all certificates that are either:
+    //   - not present on disk (first run)
+    //   - expired (NotAfter < now)
+    //   - could not be loaded (wrong password, corrupt file)
+    // Each of these is rebuilt as a new self-signed certificate.
+    // Build(true) overwrites any existing file — safe because we only
+    // reach this for certs that are missing or no longer valid.
+    var certs = new List<UaServerCertificate>
+    {
+        new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          Assembly.GetEntryAssembly().GetName().Name,
+            applicationUri: config.ApplicationUri,
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Application)
+    };
+
+    // Add one HTTPS certificate per opc.https:// hostname.
+    // ExtractHttpsHostnames() parses the base addresses and returns
+    // the unique hostnames — e.g. ["localhost"] for "opc.https://localhost:48411".
+    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
+        certs.Add(new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          host,
+            applicationUri: $"urn:{host}:https",
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Https));
+
+    var store = UaServerCertificateStore.Load(@".\pki", certs);
+
+    foreach (var missing in store.GetMissingOrExpired())
+        missing.Build(overwrite: true);
+
+    // Hand the fully populated store to the configuration.
+    // UaServer.Start() will use it to set up the secure channel and
+    // the PKI directory structure (trusted/, rejected/, issuers/).
+    config.SetCertificateStore(store);
+
+    return config;
 }
 
 // =============================================================================
@@ -378,7 +453,7 @@ static UaServerConfiguration CreateConfig()
 // all settings at a glance before the server starts accepting connections.
 static void PrintConfig(UaServerConfiguration config)
 {
-    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────────────────────");
     Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
     Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
     Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default: ApplicationUri + /nodes)"}");
@@ -391,25 +466,32 @@ static void PrintConfig(UaServerConfiguration config)
     foreach (var addr in config.BaseAddresses)
         Console.WriteLine($"    {addr}");
     Console.WriteLine();
-        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
+    Console.WriteLine();
+    Console.WriteLine("  Certificate Store:");
+    if (config.CertificateStore != null)
+        Console.WriteLine($"    {config.CertificateStore}");
+    else
+        Console.WriteLine("    (not set)");
+    Console.WriteLine();
     Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
     Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
     Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
     Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
     Console.WriteLine();
     Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
-    Console.WriteLine($"    MaxNodesPerRead                      = {config.MaxNodesPerRead}");
-    Console.WriteLine($"    MaxNodesPerWrite                     = {config.MaxNodesPerWrite}");
-    Console.WriteLine($"    MaxNodesPerBrowse                    = {config.MaxNodesPerBrowse}");
-    Console.WriteLine($"    MaxNodesPerHistoryReadData           = {config.MaxNodesPerHistoryReadData}");
-    Console.WriteLine($"    MaxNodesPerHistoryReadEvents         = {config.MaxNodesPerHistoryReadEvents}");
-    Console.WriteLine($"    MaxNodesPerHistoryUpdateData         = {config.MaxNodesPerHistoryUpdateData}");
-    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents       = {config.MaxNodesPerHistoryUpdateEvents}");
-    Console.WriteLine($"    MaxNodesPerMethodCall                = {config.MaxNodesPerMethodCall}");
-    Console.WriteLine($"    MaxNodesPerRegisterNodes             = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}");
     Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
-    Console.WriteLine($"    MaxNodesPerNodeManagement            = {config.MaxNodesPerNodeManagement}");
-    Console.WriteLine($"    MaxMonitoredItemsPerCall             = {config.MaxMonitoredItemsPerCall}");
-    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────────────────────");
     Console.WriteLine();
 }

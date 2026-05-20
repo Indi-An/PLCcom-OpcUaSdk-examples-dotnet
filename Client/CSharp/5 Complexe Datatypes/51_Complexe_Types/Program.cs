@@ -86,7 +86,7 @@ class Program
             //TODO
             //Submit your license information from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
-            string LicenseSerial   = "<Enter your Serial here>";
+            string LicenseSerial = "<Enter your Serial here>";
 
             var endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"),
                 certificateValidator: CertificateValidationHandler);
@@ -112,19 +112,14 @@ class Program
             }
             Console.WriteLine();
 
-            var sessionConfig = SessionConfiguration.Build(
-                System.Reflection.Assembly.GetEntryAssembly().GetName().Name, endpoints[idx]);
-            sessionConfig.AutoConnect = false;
-
-            Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " +
-                              sessionConfig.CertificateStorePath);
+            var sessionConfig = CreateConfig(endpoints[idx]);
 
             client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
             Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
 
             client.ServerConnectionLost += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connection lost");
-            client.ServerConnected      += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
-            client.SessionClosing       += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
+            client.ServerConnected += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session connected");
+            client.SessionClosing += (s, e) => Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
             client.CertificateValidation += CertificateValidationHandler;
 
             Console.Write("  Connecting ... ");
@@ -170,14 +165,14 @@ class Program
                 {
                     switch (input)
                     {
-                        case "1": ReadScalar();           break;
-                        case "2": ReadArrayOfScalars();   break;
-                        case "3": ReadFlatStruct();        break;
-                        case "4": WriteFlatStructField();  break;
-                        case "5": ReadNestedStruct();      break;
-                        case "6": ReadStructWithArrays();  break;
-                        case "7": ReadArrayOfStructs();    break;
-                        case "8": WriteArrayOfStructs();   break;
+                        case "1": ReadScalar(); break;
+                        case "2": ReadArrayOfScalars(); break;
+                        case "3": ReadFlatStruct(); break;
+                        case "4": WriteFlatStructField(); break;
+                        case "5": ReadNestedStruct(); break;
+                        case "6": ReadStructWithArrays(); break;
+                        case "7": ReadArrayOfStructs(); break;
+                        case "8": WriteArrayOfStructs(); break;
                     }
                 }
                 catch (Exception ex)
@@ -328,7 +323,7 @@ class Program
 
         // Array fields are also accessible as child nodes
         Console.WriteLine("  Array fields via child nodes:");
-        DataValue readings   = client.ReadValue("Objects.StructData.Sensor_Struct.Readings");
+        DataValue readings = client.ReadValue("Objects.StructData.Sensor_Struct.Readings");
         DataValue thresholds = client.ReadValue("Objects.StructData.Sensor_Struct.Thresholds");
 
         if (readings.Value is double[] r)
@@ -407,7 +402,7 @@ class Program
         // Find Speed child of element [1]
         NodeId elem1NodeId = (NodeId)elemNodes[1].NodeId;
         var fieldNodes = client.BrowseFull(elem1NodeId);
-        var speedNode  = fieldNodes.FirstOrDefault(f => f.BrowseName.Name == "Speed");
+        var speedNode = fieldNodes.FirstOrDefault(f => f.BrowseName.Name == "Speed");
 
         if (speedNode == null) { Console.WriteLine("  Speed field not found."); return; }
 
@@ -478,9 +473,81 @@ class Program
 
     void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
     {
-        if (ServiceResult.IsGood(e.Error))                 e.Accept = true;
-        else if (!e.ContainsUnsuppressibleStatusCodes)     e.Accept = true;
-        else if (e.ContainsUnsuppressibleStatusCodes)      e.AcceptAll = true;
+        if (ServiceResult.IsGood(e.Error)) e.Accept = true;
+        else if (!e.ContainsUnsuppressibleStatusCodes) e.Accept = true;
+        else if (e.ContainsUnsuppressibleStatusCodes) e.AcceptAll = true;
         else throw new Exception($"Certificate validation failed: {e.Error.Code}");
+    }
+
+    // =============================================================================
+    // Helper: CreateConfig
+    // =============================================================================
+    // Builds the SessionConfiguration for the selected endpoint.
+    //
+    // Certificate handling:
+    //   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    //   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    //
+    // UaClientCertificate derives file paths automatically from the PKI base directory:
+    //   pki/own/certs/<alias>.der    <- certificate
+    //   pki/own/private/<alias>.pem  <- private key
+    //
+    // Load() returns null if the certificate does not exist yet or cannot be read.
+    // Build(true) creates a new self-signed certificate, overwriting any existing file.
+    static SessionConfiguration CreateConfig(EndpointDescription endpoint)
+    {
+        string alias = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
+        SessionConfiguration config = SessionConfiguration.Build(alias, endpoint);
+        config.AutoConnect = false;
+
+        // HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        UaClientCertificate httpsCert = null;
+        if (endpoint.EndpointUrl != null &&
+            endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string host = new Uri(endpoint.EndpointUrl).Host;
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword");
+            if (httpsCert == null || !httpsCert.CheckValidity())
+                httpsCert = new UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        // Not needed for SecurityMode.None (unencrypted connections).
+        UaClientCertificate appCert = null;
+        if (!endpoint.SecurityMode.Equals(MessageSecurityMode.None))
+        {
+            appCert = UaClientCertificate.Load("./pki", alias, "secretpassword");
+            if (appCert == null || !appCert.CheckValidity())
+                appCert = new UaClientCertificate("./pki", "secretpassword", alias, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        if (appCert != null && httpsCert != null)
+            config.SetInstanceCertificate(appCert, httpsCert);
+        else if (appCert != null)
+            config.SetInstanceCertificate(appCert);
+
+        return config;
+    }
+
+    // =============================================================================
+    // Helper: PrintConfig
+    // =============================================================================
+    // Prints the active client configuration to the console so you can verify
+    // all settings at a glance before connecting.
+    static void PrintConfig(SessionConfiguration config)
+    {
+        Console.WriteLine("-- Active Client Configuration ------------------------------");
+        if (config.Endpoint != null)
+        {
+            Console.WriteLine($"  Endpoint  : {config.Endpoint.EndpointUrl}");
+            Console.WriteLine($"  Security  : {config.Endpoint.ToDisplayString()}");
+        }
+        Console.WriteLine($"  PKI Store : {(config.CertificateStorePath != null ? config.CertificateStorePath : "(not set)")}");
+        Console.WriteLine($"  Cert File : {(config.ApplicationCertificateFullPath != null ? config.ApplicationCertificateFullPath : "(none -- SecurityMode.None)")}");
+        Console.WriteLine("-------------------------------------------------------------");
+        Console.WriteLine();
     }
 }

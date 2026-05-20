@@ -67,25 +67,25 @@ class Program
         try
         {
 
-             Console.WriteLine();
+            Console.WriteLine();
 
 
-             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 33: Alarm Conditions    ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  OPC UA Conditions are the foundation of the alarm system.   ║");
-             Console.WriteLine("║  This workshop demonstrates how to acknowledge, confirm      ║");
-             Console.WriteLine("║  and comment on alarm conditions.                            ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  What you will learn:                                        ║");
-             Console.WriteLine("║    * Acknowledge an alarm condition                          ║");
-             Console.WriteLine("║    * Confirm an alarm condition                              ║");
-             Console.WriteLine("║    * Add comments to conditions                              ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║");
-             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
-             Console.WriteLine();
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+            Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 33: Alarm Conditions    ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  OPC UA Conditions are the foundation of the alarm system.   ║");
+            Console.WriteLine("║  This workshop demonstrates how to acknowledge, confirm      ║");
+            Console.WriteLine("║  and comment on alarm conditions.                            ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  What you will learn:                                        ║");
+            Console.WriteLine("║    * Acknowledge an alarm condition                          ║");
+            Console.WriteLine("║    * Confirm an alarm condition                              ║");
+            Console.WriteLine("║    * Add comments to conditions                              ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  Required server: Server Workshop 21 (Alarm Conditions)      ║");
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+            Console.WriteLine();
 
             //TODO
             //Submit your license information from your license e-mail
@@ -115,8 +115,8 @@ class Program
                 {
 
                     //create a a SessionConfiguration with the selected endpoint and application name
-                    SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                                                                                          Endpoints[iNumberOfEndpoint]);
+                    SessionConfiguration sessionConfiguration = CreateConfig(Endpoints[iNumberOfEndpoint]);
+                    PrintConfig(sessionConfiguration);
 
                     //disable auto connect - we connect explicitly below
                     sessionConfiguration.AutoConnect = false;
@@ -523,14 +523,14 @@ class Program
             {
                 sb.Append(String.Format("{0} ", counter++.ToString()));
                 ConditionState condition = alarmEvent.GetConditionState();
-                sb.Append(String.Format("Source={0} ",    condition.SourceName?.Value));
+                sb.Append(String.Format("Source={0} ", condition.SourceName?.Value));
                 sb.Append(String.Format("Condition={0} ", condition.ConditionName?.Value));
                 if (condition.BranchId != null) sb.Append(String.Format("Branch={0} ", condition.BranchId.Value));
                 sb.Append(String.Format("Severity={0} ", condition.Severity?.Value));
-                sb.Append(String.Format("Time={0} ",     condition.Time?.Value.ToLocalTime()));
-                sb.Append(String.Format("State={0} ",   condition.EnabledState?.EffectiveDisplayName?.Value));
+                sb.Append(String.Format("Time={0} ", condition.Time?.Value.ToLocalTime()));
+                sb.Append(String.Format("State={0} ", condition.EnabledState?.EffectiveDisplayName?.Value));
                 sb.Append(String.Format("Message={0} ", condition.Message?.Value));
-                sb.Append(String.Format("Retain={0} ",  condition.Retain?.Value));
+                sb.Append(String.Format("Retain={0} ", condition.Retain?.Value));
                 sb.Append(Environment.NewLine);
             }
 
@@ -713,5 +713,77 @@ class Program
         {
             throw new InvalidOperationException("Operation not possible, condition refresh in progress! Please try again...");
         }
+    }
+
+    // =============================================================================
+    // Helper: CreateConfig
+    // =============================================================================
+    // Builds the SessionConfiguration for the selected endpoint.
+    //
+    // Certificate handling:
+    //   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    //   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    //
+    // UaClientCertificate derives file paths automatically from the PKI base directory:
+    //   pki/own/certs/<alias>.der    <- certificate
+    //   pki/own/private/<alias>.pem  <- private key
+    //
+    // Load() returns null if the certificate does not exist yet or cannot be read.
+    // Build(true) creates a new self-signed certificate, overwriting any existing file.
+    static SessionConfiguration CreateConfig(EndpointDescription endpoint)
+    {
+        string alias = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
+        SessionConfiguration config = SessionConfiguration.Build(alias, endpoint);
+        config.AutoConnect = false;
+
+        // HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        UaClientCertificate httpsCert = null;
+        if (endpoint.EndpointUrl != null &&
+            endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string host = new Uri(endpoint.EndpointUrl).Host;
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword");
+            if (httpsCert == null || !httpsCert.CheckValidity())
+                httpsCert = new UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        // Not needed for SecurityMode.None (unencrypted connections).
+        UaClientCertificate appCert = null;
+        if (!endpoint.SecurityMode.Equals(MessageSecurityMode.None))
+        {
+            appCert = UaClientCertificate.Load("./pki", alias, "secretpassword");
+            if (appCert == null || !appCert.CheckValidity())
+                appCert = new UaClientCertificate("./pki", "secretpassword", alias, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        if (appCert != null && httpsCert != null)
+            config.SetInstanceCertificate(appCert, httpsCert);
+        else if (appCert != null)
+            config.SetInstanceCertificate(appCert);
+
+        return config;
+    }
+
+    // =============================================================================
+    // Helper: PrintConfig
+    // =============================================================================
+    // Prints the active client configuration to the console so you can verify
+    // all settings at a glance before connecting.
+    static void PrintConfig(SessionConfiguration config)
+    {
+        Console.WriteLine("-- Active Client Configuration ------------------------------");
+        if (config.Endpoint != null)
+        {
+            Console.WriteLine($"  Endpoint  : {config.Endpoint.EndpointUrl}");
+            Console.WriteLine($"  Security  : {config.Endpoint.ToDisplayString()}");
+        }
+        Console.WriteLine($"  PKI Store : {(config.CertificateStorePath != null ? config.CertificateStorePath : "(not set)")}");
+        Console.WriteLine($"  Cert File : {(config.ApplicationCertificateFullPath != null ? config.ApplicationCertificateFullPath : "(none -- SecurityMode.None)")}");
+        Console.WriteLine("-------------------------------------------------------------");
+        Console.WriteLine();
     }
 }

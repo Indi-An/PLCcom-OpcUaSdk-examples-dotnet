@@ -81,7 +81,7 @@ class Program
             //TODO
             //Submit your license information from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
-            string LicenseSerial   = "<Enter your Serial here>";
+            string LicenseSerial = "<Enter your Serial here>";
 
             var endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"),
                 certificateValidator: client_CertificateValidation);
@@ -107,20 +107,15 @@ class Program
             }
             Console.WriteLine();
 
-            var sessionConfig = SessionConfiguration.Build(
-                System.Reflection.Assembly.GetEntryAssembly().GetName().Name, endpoints[idx]);
-            sessionConfig.AutoConnect = false;
-
-            Console.WriteLine("Info: Sessionconfiguration created, certificate store path => " +
-                              sessionConfig.CertificateStorePath);
+            var sessionConfig = CreateConfig(endpoints[idx]);
 
             client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
             Console.WriteLine("Info: license state => " + client.GetLicenceMessage());
 
             client.ServerConnectionLost += Client_ServerConnectionLost;
-            client.ServerConnected      += Client_ServerConnected;
-            client.SessionClosing       += Client_SessionClosing;
-            client.KeepAlive            += Client_KeepAlive;
+            client.ServerConnected += Client_ServerConnected;
+            client.SessionClosing += Client_SessionClosing;
+            client.KeepAlive += Client_KeepAlive;
             client.CertificateValidation += client_CertificateValidation;
 
             Console.Write("  Connecting ... ");
@@ -148,16 +143,16 @@ class Program
                 filter.SelectClauses.Add(new SimpleAttributeOperand
                 {
                     TypeDefinitionId = ObjectTypeIds.BaseEventType,
-                    BrowsePath       = new QualifiedNameCollection { new QualifiedName(name) },
-                    AttributeId      = Attributes.Value
+                    BrowsePath = new QualifiedNameCollection { new QualifiedName(name) },
+                    AttributeId = Attributes.Value
                 });
 
             // -- Create subscription ------------------------------------------
             var subscription = new Subscription
             {
                 PublishingInterval = 1000,
-                PublishingEnabled  = true,
-                DisplayName        = "myEventSubscription"
+                PublishingEnabled = true,
+                DisplayName = "myEventSubscription"
             };
             subscription.StateChanged += Subscription_StateChanged;
             client.AddSubscription(subscription);
@@ -173,14 +168,14 @@ class Program
 
             var monitoredItem = new MonitoredItem((ITelemetryContext)null)
             {
-                NodeClass      = reference.NodeClass,
-                AttributeId    = Attributes.EventNotifier,
+                NodeClass = reference.NodeClass,
+                AttributeId = Attributes.EventNotifier,
                 MonitoringMode = MonitoringMode.Reporting,
-                StartNodeId    = nodeId,
-                Filter         = filter,
-                DisplayName    = "reactor event monitoring",
-                QueueSize      = uint.MaxValue,
-                DiscardOldest  = true
+                StartNodeId = nodeId,
+                Filter = filter,
+                DisplayName = "reactor event monitoring",
+                QueueSize = uint.MaxValue,
+                DiscardOldest = true
             };
 
             monitoredItem.Notification += Client_MonitorNotification;
@@ -228,9 +223,9 @@ class Program
 
     void client_CertificateValidation(CertificateValidator sender, CertificateValidationEventArgs e)
     {
-        if (ServiceResult.IsGood(e.Error))                    e.Accept = true;
-        else if (!e.ContainsUnsuppressibleStatusCodes)        e.Accept = true;
-        else if (e.ContainsUnsuppressibleStatusCodes)         e.AcceptAll = true;
+        if (ServiceResult.IsGood(e.Error)) e.Accept = true;
+        else if (!e.ContainsUnsuppressibleStatusCodes) e.Accept = true;
+        else if (e.ContainsUnsuppressibleStatusCodes) e.AcceptAll = true;
         else throw new Exception($"Certificate validation failed: {e.Error.Code} {e.Error.AdditionalInfo}");
     }
 
@@ -250,5 +245,77 @@ class Program
         var sb = new StringBuilder(ba.Length * 2);
         foreach (byte b in ba) sb.AppendFormat("{0:x2}", b);
         return sb.ToString();
+    }
+
+    // =============================================================================
+    // Helper: CreateConfig
+    // =============================================================================
+    // Builds the SessionConfiguration for the selected endpoint.
+    //
+    // Certificate handling:
+    //   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    //   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    //
+    // UaClientCertificate derives file paths automatically from the PKI base directory:
+    //   pki/own/certs/<alias>.der    <- certificate
+    //   pki/own/private/<alias>.pem  <- private key
+    //
+    // Load() returns null if the certificate does not exist yet or cannot be read.
+    // Build(true) creates a new self-signed certificate, overwriting any existing file.
+    static SessionConfiguration CreateConfig(EndpointDescription endpoint)
+    {
+        string alias = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
+        SessionConfiguration config = SessionConfiguration.Build(alias, endpoint);
+        config.AutoConnect = false;
+
+        // HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        UaClientCertificate httpsCert = null;
+        if (endpoint.EndpointUrl != null &&
+            endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string host = new Uri(endpoint.EndpointUrl).Host;
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword");
+            if (httpsCert == null || !httpsCert.CheckValidity())
+                httpsCert = new UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        // Not needed for SecurityMode.None (unencrypted connections).
+        UaClientCertificate appCert = null;
+        if (!endpoint.SecurityMode.Equals(MessageSecurityMode.None))
+        {
+            appCert = UaClientCertificate.Load("./pki", alias, "secretpassword");
+            if (appCert == null || !appCert.CheckValidity())
+                appCert = new UaClientCertificate("./pki", "secretpassword", alias, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        if (appCert != null && httpsCert != null)
+            config.SetInstanceCertificate(appCert, httpsCert);
+        else if (appCert != null)
+            config.SetInstanceCertificate(appCert);
+
+        return config;
+    }
+
+    // =============================================================================
+    // Helper: PrintConfig
+    // =============================================================================
+    // Prints the active client configuration to the console so you can verify
+    // all settings at a glance before connecting.
+    static void PrintConfig(SessionConfiguration config)
+    {
+        Console.WriteLine("-- Active Client Configuration ------------------------------");
+        if (config.Endpoint != null)
+        {
+            Console.WriteLine($"  Endpoint  : {config.Endpoint.EndpointUrl}");
+            Console.WriteLine($"  Security  : {config.Endpoint.ToDisplayString()}");
+        }
+        Console.WriteLine($"  PKI Store : {(config.CertificateStorePath != null ? config.CertificateStorePath : "(not set)")}");
+        Console.WriteLine($"  Cert File : {(config.ApplicationCertificateFullPath != null ? config.ApplicationCertificateFullPath : "(none -- SecurityMode.None)")}");
+        Console.WriteLine("-------------------------------------------------------------");
+        Console.WriteLine();
     }
 }

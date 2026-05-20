@@ -1,4 +1,4 @@
-﻿' MIT License
+' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,19 +27,25 @@
 ' storing passwords. The client presents a certificate and the server
 ' validates it against its trusted certificate store.
 '
+' OPC UA supports three user identity types:
+'   Anonymous   - no credentials (see Workshop 12)
+'   UserName    - classic username + password (see Workshop 13)
+'   Certificate - X.509 client certificate (this workshop)
+'
 ' What you will learn:
-'   * How to load an X.509 certificate from a .pfx/.p12 file
+'   * How to load or create an X.509 user certificate with UaClientCertificate
 '   * How to set certificate-based UserIdentity on a session
 '   * How certificate authentication differs from username/password
+'   * How the server validates the user certificate
 '
 ' Target server: opc.tcp://localhost:48410
+' (Start Server Workshop 12 for a server that accepts certificate authentication)
 ' ==============================================================================
 
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Client
 Imports PLCcom.Opc.Ua.Client.Sdk
 Imports System
-Imports System.Security.Cryptography.X509Certificates
 
 Public Class Program
 
@@ -59,9 +65,11 @@ Public Class Program
         Console.WriteLine("║  against its trusted certificate store.                      ║")
         Console.WriteLine("║                                                              ║")
         Console.WriteLine("║  What you will learn:                                        ║")
-        Console.WriteLine("║    * Load an X.509 certificate from a .pfx file              ║")
+        Console.WriteLine("║    * Load or create an X.509 user certificate                ║")
         Console.WriteLine("║    * Set certificate-based UserIdentity on a session         ║")
         Console.WriteLine("║    * Difference to username/password authentication          ║")
+        Console.WriteLine("║                                                              ║")
+        Console.WriteLine("║  opc.tcp://localhost:48410                                   ║")
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝")
         Console.WriteLine()
 
@@ -78,7 +86,8 @@ Public Class Program
             Console.WriteLine("  Discovering endpoints...")
             Console.WriteLine()
 
-            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri(serverUrl), certificateValidator:=AddressOf CertificateValidationHandler)
+            Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(
+                New Uri(serverUrl), certificateValidator:=AddressOf CertificateValidationHandler)
             endpoints = UaClient.SortEndpointsBySecurityLevel(endpoints)
 
             If endpoints.Count = 0 Then
@@ -103,26 +112,29 @@ Public Class Program
                 Return
             End If
 
-            ' -- Step 2: Build SessionConfiguration with certificate identity -----
-            Dim sessionConfig As SessionConfiguration = SessionConfiguration.Build(
-                "PLCcom_Workshop_14", endpoints(index))
-            sessionConfig.AutoConnect = False
-
-            ' Load the user certificate from a .pfx/.p12 file.
-            ' TODO: Replace with the path and password of your user certificate
-            Dim certPath As String = "<path to certificate>"
-            Dim certPassword As String = "<password of certificate>"
-#If NET9_0_OR_GREATER Then
-            Dim certificate As X509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(certPath, certPassword)
-#Else
-            Dim certificate As New X509Certificate2(certPath, certPassword)
-#End If
-            sessionConfig.Identity = New UserIdentity(certificate)
-
             Console.WriteLine()
-            Console.WriteLine("  Certificate store: " & sessionConfig.CertificateStorePath)
+            Console.WriteLine($"  Selected: {endpoints(index).ToDisplayString()}")
+            Console.WriteLine()
 
-            ' -- Step 3: Create client and register events ------------------------
+            ' -- Step 2: Load or create the user certificate ----------------------
+            ' The user certificate identifies the user to the server.
+            ' It is separate from the application instance certificate (which
+            ' identifies the client application for the secure channel).
+            ' The server must trust this certificate -- add it to its trusted store.
+            Dim userCert As UaClientCertificate = UaClientCertificate.Load("./pki", "PLCcom_Workshop_14_User", "secretpassword")
+            If userCert Is Nothing OrElse Not userCert.CheckValidity() Then
+                userCert = New UaClientCertificate("./pki", "secretpassword", "PLCcom_Workshop_14_User", 720, "Indi.An GmbH") _
+                    .Build(overwrite:=True)
+            End If
+
+            Console.WriteLine($"  User certificate: {userCert}")
+            Console.WriteLine()
+
+            ' -- Step 3: Build SessionConfiguration with certificate identity -----
+            Dim sessionConfig As SessionConfiguration = CreateConfig(endpoints(index), userCert)
+            PrintConfig(sessionConfig)
+
+            ' -- Step 4: Create client and register events ------------------------
             Dim client As New UaClient(LicenseUserName, LicenseSerial, sessionConfig)
             Console.WriteLine("  License: " & client.GetLicenceMessage())
             Console.WriteLine()
@@ -135,16 +147,22 @@ Public Class Program
             End Sub
             AddHandler client.KeepAlive, Sub(session, e)
             End Sub
+
+            ' Accept all client certificates automatically.
+            ' WARNING: Do NOT use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate and e.Error, then set e.Accept = True or False),
+            ' or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler client.CertificateValidation, AddressOf CertificateValidationHandler
 
-            ' -- Step 4: Connect --------------------------------------------------
+            ' -- Step 5: Connect --------------------------------------------------
             Console.Write("  Connecting with certificate ... ")
             client.Connect()
             Console.WriteLine("OK")
             Console.WriteLine($"  Session state: {client.GetSessionState()}")
             Console.WriteLine()
 
-            ' -- Step 5: Disconnect -----------------------------------------------
+            ' -- Step 6: Disconnect -----------------------------------------------
             Console.WriteLine("  Press ENTER to disconnect and exit.")
             Console.ReadLine()
 
@@ -163,11 +181,78 @@ Public Class Program
 
     End Sub
 
+    ' ── Event handlers ────────────────────────────────────────────────────────
+
     Private Sub CertificateValidationHandler(ByVal sender As CertificateValidator, ByVal e As CertificateValidationEventArgs)
-        ' Called when the server presents its certificate - both during opc.https
-        ' discovery (TLS) and when a security policy other than None is used.
-        ' Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        ' Called when the server presents its certificate during the secure channel
+        ' handshake. Inspect e.Certificate and e.Error, then set e.Accept accordingly.
+        ' For development we accept all certificates here.
         e.Accept = True
         Console.WriteLine($"  [Certificate] Accepted: {e.Certificate.Subject}")
     End Sub
+
+    ' ── Helpers ───────────────────────────────────────────────────────────────
+
+    ' =============================================================================
+    ' Helper: CreateConfig
+    ' =============================================================================
+    ' Builds the SessionConfiguration for the selected endpoint.
+    ' Sets the UserIdentity to use the provided user certificate.
+    Private Shared Function CreateConfig(ByVal endpoint As EndpointDescription,
+                                          ByVal userCert As UaClientCertificate) As SessionConfiguration
+        Dim appAlias As String = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
+        Dim config As SessionConfiguration = SessionConfiguration.Build(appAlias, endpoint)
+        config.AutoConnect = False
+
+        ' Set certificate-based user identity.
+        ' The server validates this certificate against its trusted user certificate store.
+        config.Identity = New UserIdentity(userCert.GetCertificate())
+
+        ' HTTPS certificate -- required for opc.https:// endpoints.
+        Dim httpsCert As UaClientCertificate = Nothing
+        If endpoint.EndpointUrl IsNot Nothing AndAlso
+           endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase) Then
+            Dim host As String = New Uri(endpoint.EndpointUrl).Host
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword")
+            If httpsCert Is Nothing OrElse Not httpsCert.CheckValidity() Then
+                httpsCert = New UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH") _
+                    .Build(overwrite:=True)
+            End If
+        End If
+
+        ' Application certificate -- required for secured endpoints.
+        Dim appCert As UaClientCertificate = Nothing
+        If Not endpoint.SecurityMode.Equals(MessageSecurityMode.None) Then
+            appCert = UaClientCertificate.Load("./pki", appAlias, "secretpassword")
+            If appCert Is Nothing OrElse Not appCert.CheckValidity() Then
+                appCert = New UaClientCertificate("./pki", "secretpassword", appAlias, 720, "Indi.An GmbH") _
+                    .Build(overwrite:=True)
+            End If
+        End If
+
+        If appCert IsNot Nothing AndAlso httpsCert IsNot Nothing Then
+            config.SetInstanceCertificate(appCert, httpsCert)
+        ElseIf appCert IsNot Nothing Then
+            config.SetInstanceCertificate(appCert)
+        End If
+
+        Return config
+    End Function
+
+    ' =============================================================================
+    ' Helper: PrintConfig
+    ' =============================================================================
+    Private Shared Sub PrintConfig(ByVal config As SessionConfiguration)
+        Console.WriteLine("-- Active Client Configuration ------------------------------")
+        If config.Endpoint IsNot Nothing Then
+            Console.WriteLine("  Endpoint  : " & config.Endpoint.EndpointUrl)
+            Console.WriteLine("  Security  : " & config.Endpoint.ToDisplayString())
+        End If
+        Console.WriteLine("  Identity  : Certificate")
+        Console.WriteLine("  PKI Store : " & If(config.CertificateStorePath IsNot Nothing, config.CertificateStorePath, "(not set)"))
+        Console.WriteLine("  Cert File : " & If(config.ApplicationCertificateFullPath IsNot Nothing, config.ApplicationCertificateFullPath, "(none -- SecurityMode.None)"))
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
+    End Sub
+
 End Class

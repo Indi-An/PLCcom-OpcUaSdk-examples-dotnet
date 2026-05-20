@@ -19,14 +19,6 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
-Imports PLCcom.Opc.Ua
-Imports PLCcom.Opc.Ua.Server.Sdk
-Imports System
-Imports System.Collections.Generic
-Imports System.Globalization
-Imports System.IO
-Imports System.Linq
-Imports System.Threading
 
 ' ==============================================================================
 ' PLCcom OPC UA Server SDK - Workshop 34: Custom History Store
@@ -45,6 +37,15 @@ Imports System.Threading
 ' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
 
+Imports PLCcom.Opc.Ua
+Imports PLCcom.Opc.Ua.Server.Sdk
+Imports System
+Imports System.Collections.Generic
+Imports System.Globalization
+Imports System.IO
+Imports System.Linq
+Imports System.Reflection
+Imports System.Threading
 Module Program
 
     Sub Main(args As String())
@@ -68,6 +69,12 @@ Module Program
         PrintConfig(config)
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
+
+            ' Accept all client certificates automatically.
+            ' WARNING: Do Not use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate And e.Error, then set e.Accept = true Or false),
+            ' Or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
 
             server.HistoryStore = New CsvHistoryStore(".\history")
@@ -85,23 +92,23 @@ Module Program
             Console.WriteLine()
 
             AddHandler server.HistoryUpdated, Sub(s, e)
-                Dim detail As String
-                If e.Operation = UaHistoryUpdateOperation.DeleteAtTime Then
-                    detail = $"deleted {e.Timestamps.Length} entries"
-                ElseIf e.Timestamps.Length > 0 Then
-                    Dim parts(e.Timestamps.Length - 1) As String
-                    For i As Integer = 0 To e.Timestamps.Length - 1
-                        Dim ts As String = e.Timestamps(i).ToLocalTime().ToString("HH:mm:ss.fff")
-                        Dim val As String = If(e.Values IsNot Nothing AndAlso i < e.Values.Length AndAlso e.Values(i) IsNot Nothing,
-                            $"  value={e.Values(i),-10}", String.Empty)
-                        parts(i) = ts & val
-                    Next
-                    detail = String.Join(vbCrLf & "                          ", parts)
-                Else
-                    detail = "(range delete)"
-                End If
-                Console.WriteLine($"{vbCrLf}  << {e.Operation,-15}  {detail}  path={e.Path}")
-            End Sub
+                                                  Dim detail As String
+                                                  If e.Operation = UaHistoryUpdateOperation.DeleteAtTime Then
+                                                      detail = $"deleted {e.Timestamps.Length} entries"
+                                                  ElseIf e.Timestamps.Length > 0 Then
+                                                      Dim parts(e.Timestamps.Length - 1) As String
+                                                      For i As Integer = 0 To e.Timestamps.Length - 1
+                                                          Dim ts As String = e.Timestamps(i).ToLocalTime().ToString("HH:mm:ss.fff")
+                                                          Dim val As String = If(e.Values IsNot Nothing AndAlso i < e.Values.Length AndAlso e.Values(i) IsNot Nothing,
+                                                              $"  value={e.Values(i),-10}", String.Empty)
+                                                          parts(i) = ts & val
+                                                      Next
+                                                      detail = String.Join(vbCrLf & "                          ", parts)
+                                                  Else
+                                                      detail = "(range delete)"
+                                                  End If
+                                                  Console.WriteLine($"{vbCrLf}  << {e.Operation,-15}  {detail}  path={e.Path}")
+                                              End Sub
 
             Dim plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
             Dim sensor = server.CreateFolder(plant, "Sensor", UaRolePermissions.WITHOUT_RESTRICTIONS)
@@ -182,8 +189,6 @@ Module Program
         cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
 
         ' ── PKI Certificate Store ─────────────────────────────────────────────
-        cfg.CertificateStorePath = ".\pki"
-        cfg.CertificateLifetimeInMonths = 60
         cfg.AutoAcceptUntrustedCertificates = False
 
         ' ── Endpoint Host Normalization ───────────────────────────────────────
@@ -210,17 +215,56 @@ Module Program
         cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
         cfg.MaxNodesPerNodeManagement = 1000
         cfg.MaxMonitoredItemsPerCall = 1000
-        Return cfg
+
+        ' -- PKI Certificate Store -----------------------------------------------
+        ' UaServerCertificateStore manages all server certificates.
+        ' Load() tries to load existing certificates from disk.
+        ' GetMissingOrExpired() returns certificates that need to be (re)created.
+        ' Build(overwrite:=True) creates a new self-signed certificate on disk.
+        ''
+        ' One Application certificate is required for the OPC UA secure channel.
+        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        Dim certs As New List(Of UaServerCertificate) From {
+            New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=Assembly.GetEntryAssembly().GetName().Name,
+                applicationUri:=cfg.ApplicationUri,
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Application)
+        }
+
+        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
+            certs.Add(New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=host,
+                applicationUri:=$"urn:{host}:https",
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Https))
+        Next
+
+        Dim store = UaServerCertificateStore.Load(".\pki", certs)
+        For Each missing In store.GetMissingOrExpired()
+            missing.Build(overwrite:=True)
+        Next
+        cfg.SetCertificateStore(store)
+                Return cfg
     End Function
 
     ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+' ==========================================================================
     ' Helper: PrintConfig
     ' ==========================================================================
     Private Sub PrintConfig(config As UaServerConfiguration)
         Console.WriteLine("-- Active Server Configuration ------------------------------")
         Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
         Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
-        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default: ApplicationUri + /nodes)"))
         Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
         Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
         Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
@@ -231,14 +275,33 @@ Module Program
             Console.WriteLine("    " & addr)
         Next
         Console.WriteLine()
-                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
-        Console.WriteLine("  VendorServerInfo:")
-        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
         Console.WriteLine()
-        Console.WriteLine("  OperationLimits:")
-        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
-        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
-        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("  Certificate Store:")
+        If config.CertificateStore IsNot Nothing Then
+            Console.WriteLine("    " & config.CertificateStore.ToString())
+        Else
+            Console.WriteLine("    (not set)")
+        End If
+        Console.WriteLine()
+        Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):")
+        Console.WriteLine("    VendorName           = " & If(config.VendorName, "(not set)"))
+        Console.WriteLine("    VendorProductName    = " & If(config.VendorProductName, "(not set)"))
+        Console.WriteLine("    VendorProductVersion = " & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):")
+        Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}")
+        Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}")
+        Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}")
+        Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}")
+        Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}")
+        Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}")
+        Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}")
+        Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}")
         Console.WriteLine("-------------------------------------------------------------")
         Console.WriteLine()
     End Sub

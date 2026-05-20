@@ -1,4 +1,4 @@
-﻿// MIT License
+// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -54,25 +54,25 @@ class Program
         try
         {
 
-             Console.WriteLine();
+            Console.WriteLine();
 
 
-             Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-             Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 27: Registered R/W      ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  RegisterNodes tells the server to optimize access to        ║");
-             Console.WriteLine("║  specific nodes. The server caches internal references,      ║");
-             Console.WriteLine("║  making subsequent read/write operations faster.             ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  What you will learn:                                        ║");
-             Console.WriteLine("║    * Register nodes for optimized access                     ║");
-             Console.WriteLine("║    * Read and write using registered NodeIds                 ║");
-             Console.WriteLine("║    * Unregister nodes when done                              ║");
-             Console.WriteLine("║                                                              ║");
-             Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
-             Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
-             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
-             Console.WriteLine();
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+            Console.WriteLine("║  PLCcom OPC UA Client SDK - Workshop 27: Registered R/W      ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  RegisterNodes tells the server to optimize access to        ║");
+            Console.WriteLine("║  specific nodes. The server caches internal references,      ║");
+            Console.WriteLine("║  making subsequent read/write operations faster.             ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  What you will learn:                                        ║");
+            Console.WriteLine("║    * Register nodes for optimized access                     ║");
+            Console.WriteLine("║    * Read and write using registered NodeIds                 ║");
+            Console.WriteLine("║    * Unregister nodes when done                              ║");
+            Console.WriteLine("║                                                              ║");
+            Console.WriteLine("║  Required server: Server Workshop 11 (Simple Server)         ║");
+            Console.WriteLine("║  opc.tcp://localhost:48410                                   ║");
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+            Console.WriteLine();
 
             //TODO
             //Submit your license information from your license e-mail
@@ -100,8 +100,8 @@ class Program
                 if (int.TryParse(NumberOfEndpoint, out iNumberOfEndpoint) && iNumberOfEndpoint > -1 && iNumberOfEndpoint < Endpoints.Count)
                 {
                     //create a a SessionConfiguration with the selected endpoint and application name
-                    SessionConfiguration sessionConfiguration = SessionConfiguration.Build(System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                                                                                          Endpoints[iNumberOfEndpoint]);
+                    SessionConfiguration sessionConfiguration = CreateConfig(Endpoints[iNumberOfEndpoint]);
+                    PrintConfig(sessionConfiguration);
 
                     //enable auto connect functionality
                     sessionConfiguration.AutoConnect = true;
@@ -141,13 +141,13 @@ class Program
                         if (StatusCode.IsGood(res.ResponseHeader.ServiceResult))
                         {
 
-                             registeredNodeIds = res.RegisteredNodeIds;
+                            registeredNodeIds = res.RegisteredNodeIds;
 
                             //write your registered node
                             StatusCode sc = client.Write(registeredNodeIds[0], 1750, Attributes.Value);
                             Console.WriteLine(Utils.Format("write Node {0} Statuscode => {1}", registeredNodeIds[0].ToString(), sc.ToString()));
 
-                            
+
                             //copy NodeIdCollection to ReadValueIdCollection
                             ReadValueIdCollection readValueIdCollection = new ReadValueIdCollection();
                             for (int i = 0; i < registeredNodeIds.Count; i++)
@@ -275,5 +275,78 @@ class Program
     private void Client_SessionClosing(object sender, EventArgs e)
     {
         Console.WriteLine(DateTime.Now.ToLocalTime() + " Session closed");
+    }
+
+    // =============================================================================
+    // Helper: CreateConfig
+    // =============================================================================
+    // Builds the SessionConfiguration for the selected endpoint.
+    //
+    // Certificate handling:
+    //   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    //   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    //
+    // UaClientCertificate derives file paths automatically from the PKI base directory:
+    //   pki/own/certs/<alias>.der    <- certificate
+    //   pki/own/private/<alias>.pem  <- private key
+    //
+    // Load() returns null if the certificate does not exist yet or cannot be read.
+    // Build(true) creates a new self-signed certificate, overwriting any existing file.
+    static SessionConfiguration CreateConfig(EndpointDescription endpoint)
+    {
+
+        string alias = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
+        SessionConfiguration config = SessionConfiguration.Build(alias, endpoint);
+        config.AutoConnect = false;
+
+        // HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        UaClientCertificate httpsCert = null;
+        if (endpoint.EndpointUrl != null &&
+            endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string host = new Uri(endpoint.EndpointUrl).Host;
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword");
+            if (httpsCert == null || !httpsCert.CheckValidity())
+                httpsCert = new UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        // Not needed for SecurityMode.None (unencrypted connections).
+        UaClientCertificate appCert = null;
+        if (!endpoint.SecurityMode.Equals(MessageSecurityMode.None))
+        {
+            appCert = UaClientCertificate.Load("./pki", alias, "secretpassword");
+            if (appCert == null || !appCert.CheckValidity())
+                appCert = new UaClientCertificate("./pki", "secretpassword", alias, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        if (appCert != null && httpsCert != null)
+            config.SetInstanceCertificate(appCert, httpsCert);
+        else if (appCert != null)
+            config.SetInstanceCertificate(appCert);
+
+        return config;
+    }
+
+    // =============================================================================
+    // Helper: PrintConfig
+    // =============================================================================
+    // Prints the active client configuration to the console so you can verify
+    // all settings at a glance before connecting.
+    static void PrintConfig(SessionConfiguration config)
+    {
+        Console.WriteLine("-- Active Client Configuration ------------------------------");
+        if (config.Endpoint != null)
+        {
+            Console.WriteLine($"  Endpoint  : {config.Endpoint.EndpointUrl}");
+            Console.WriteLine($"  Security  : {config.Endpoint.ToDisplayString()}");
+        }
+        Console.WriteLine($"  PKI Store : {(config.CertificateStorePath != null ? config.CertificateStorePath : "(not set)")}");
+        Console.WriteLine($"  Cert File : {(config.ApplicationCertificateFullPath != null ? config.ApplicationCertificateFullPath : "(none -- SecurityMode.None)")}");
+        Console.WriteLine("-------------------------------------------------------------");
+        Console.WriteLine();
     }
 }

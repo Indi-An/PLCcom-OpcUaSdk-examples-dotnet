@@ -116,7 +116,7 @@ Public Class Program
             ' Build the session configuration.
             ' AutoConnect = False because we manage the connection manually via ConnectReverse().
             Dim sessionConfiguration As SessionConfiguration = SessionConfiguration.Build(
-                sessionName:="71_ReverseConnect",
+                sessionName:=System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                 endpoint:=endpoint)
             sessionConfiguration.AutoConnect = False
             sessionConfiguration.AutoAcceptUntrustedCertificates = True

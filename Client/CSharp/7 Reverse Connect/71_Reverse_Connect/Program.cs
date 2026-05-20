@@ -117,7 +117,7 @@ class Program
             // Build the session configuration.
             // AutoConnect = false because we manage the connection manually via ConnectReverse().
             SessionConfiguration sessionConfiguration = SessionConfiguration.Build(
-                sessionName: "71_ReverseConnect",
+                sessionName: System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
                 endpoint:    endpoint);
             sessionConfiguration.AutoConnect = false;
             sessionConfiguration.AutoAcceptUntrustedCertificates = true;

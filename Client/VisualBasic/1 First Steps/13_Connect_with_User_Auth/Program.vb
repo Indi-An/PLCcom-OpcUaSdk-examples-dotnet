@@ -1,4 +1,4 @@
-﻿' MIT License
+' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -110,9 +110,9 @@ Public Class Program
             End If
 
             ' -- Step 2: Build SessionConfiguration with user credentials ---------
-            Dim sessionConfig As SessionConfiguration = SessionConfiguration.Build(
-                "PLCcom_Workshop_13", endpoints(index))
-            sessionConfig.AutoConnect = False
+            Dim sessionConfig As SessionConfiguration = CreateConfig(endpoints(index))
+
+            PrintConfig(sessionConfig)
 
             ' Set username/password authentication.
             ' The UserIdentity is sent to the server during the ActivateSession call.
@@ -134,7 +134,6 @@ Public Class Program
             sessionConfig.Identity = New UserIdentity(username, password)
 
             Console.WriteLine()
-            Console.WriteLine("  Certificate store: " & sessionConfig.CertificateStorePath)
 
             ' -- Step 3: Create client and register events ------------------------
             Dim client As New UaClient(LicenseUserName, LicenseSerial, sessionConfig)
@@ -230,4 +229,70 @@ Public Class Program
         Console.WriteLine()
         Return password.ToString()
     End Function
+
+    ' =============================================================================
+    ' Helper: CreateConfig
+    ' =============================================================================
+    ' Builds the SessionConfiguration for the selected endpoint.
+    '
+    ' Certificate handling:
+    '   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    '   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    '
+    ' Load() returns Nothing if the certificate does not exist yet or cannot be read.
+    ' Build(True) creates a new self-signed certificate, overwriting any existing file.
+    Private Shared Function CreateConfig(ByVal endpoint As EndpointDescription) As SessionConfiguration
+        Dim appAlias As String = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
+        Dim config As SessionConfiguration = SessionConfiguration.Build(appAlias, endpoint)
+        config.AutoConnect = False
+
+        ' HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        Dim httpsCert As UaClientCertificate = Nothing
+        If endpoint.EndpointUrl IsNot Nothing AndAlso
+           endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase) Then
+            Dim host As String = New Uri(endpoint.EndpointUrl).Host
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword")
+            If httpsCert Is Nothing OrElse Not httpsCert.CheckValidity() Then
+                httpsCert = New UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH") _
+                    .Build(overwrite:=True)
+            End If
+        End If
+
+        ' Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        ' Not needed for SecurityMode.None (unencrypted connections).
+        Dim appCert As UaClientCertificate = Nothing
+        If Not endpoint.SecurityMode.Equals(MessageSecurityMode.None) Then
+            appCert = UaClientCertificate.Load("./pki", appAlias, "secretpassword")
+            If appCert Is Nothing OrElse Not appCert.CheckValidity() Then
+                appCert = New UaClientCertificate("./pki", "secretpassword", appAlias, 720, "Indi.An GmbH") _
+                    .Build(overwrite:=True)
+            End If
+        End If
+
+        ' SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        If appCert IsNot Nothing AndAlso httpsCert IsNot Nothing Then
+            config.SetInstanceCertificate(appCert, httpsCert)
+        ElseIf appCert IsNot Nothing Then
+            config.SetInstanceCertificate(appCert)
+        End If
+
+        Return config
+    End Function
+
+    ' =============================================================================
+    ' Helper: PrintConfig
+    ' =============================================================================
+    ' Prints the active client configuration to the console so you can verify
+    ' all settings at a glance before connecting.
+    Private Shared Sub PrintConfig(ByVal config As SessionConfiguration)
+        Console.WriteLine("-- Active Client Configuration ------------------------------")
+        If config.Endpoint IsNot Nothing Then
+            Console.WriteLine("  Endpoint  : " & config.Endpoint.EndpointUrl)
+            Console.WriteLine("  Security  : " & config.Endpoint.ToDisplayString())
+        End If
+        Console.WriteLine("  PKI Store : " & If(config.CertificateStorePath IsNot Nothing, config.CertificateStorePath, "(not set)"))
+        Console.WriteLine("  Cert File : " & If(config.ApplicationCertificateFullPath IsNot Nothing, config.ApplicationCertificateFullPath, "(none -- SecurityMode.None)"))
+        Console.WriteLine("-------------------------------------------------------------")
+        Console.WriteLine()
+    End Sub
 End Class

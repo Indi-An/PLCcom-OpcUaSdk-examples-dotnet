@@ -6,6 +6,6 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.3.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.4.*" />
   </ItemGroup>
 </Project>

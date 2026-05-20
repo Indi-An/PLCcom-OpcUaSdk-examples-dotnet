@@ -75,6 +75,7 @@ using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Server;
 using PLCcom.Opc.Ua.Server.Sdk;
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -115,6 +116,12 @@ using var server = new UaServer(LicenseUserName, LicenseSerial);
 
 
 // Accept all certificates for development
+
+// Accept all client certificates automatically.
+// WARNING: Do NOT use this in production! Either implement your own validation
+// logic here (inspect e.Certificate and e.Error, then set e.Accept = true or false),
+// or remove this handler entirely -- the SDK will then automatically validate
+// certificates against the PKI trust store (pki/trusted/certs/).
 server.CertificateValidation += (sender, e) => e.Accept = true;
 
 // Track client sessions
@@ -123,11 +130,45 @@ server.SessionCreated += (s, e) =>
 server.SessionClosed += (s, e) =>
     Console.WriteLine($"  >> Session closed: {e.SessionName}");
 
-// Log all client writes
+// WriteValidation — called BEFORE any client write is committed to the address space.
+// All internal checks (AccessLevel, DataType, Permissions) have already passed.
+// Set item.StatusCode to any Bad_* value to reject that specific item.
+//
+// You can also MODIFY the value before it is written by setting item.Value.
+// The modified value is then stored in the address space instead of the original.
+//
+// !! IMPORTANT — PERFORMANCE WARNING !!
+// This handler runs synchronously on the server's write thread.
+// Any blocking operation (device I/O, database, slow network) will stall
+// the entire write request and can block other clients as well.
+//
+// If you need to forward the value to a device, prefer one of these patterns:
+//   a) Accept immediately (Good) and forward asynchronously via Task.Run or a queue.
+//      The OPC UA client gets a fast response; the device update happens in the background.
+//   b) If you must wait for the device, always use a short timeout (e.g. 500 ms)
+//      and return BadTimeout or BadNoCommunication if the device does not respond in time.
+//
+// Never await or block indefinitely inside this handler.
+server.WriteValidation += (s, e) =>
+{
+    foreach (var item in e.Items)
+    {
+        // Example: accept immediately and forward to device asynchronously
+        // Task.Run(() => plc.WriteValue(item.Path, item.Value));
+        //
+        // Example: forward synchronously with timeout, reject on failure
+        // bool ok = plc.WriteValue(item.Path, item.Value, timeoutMs: 500);
+        // if (!ok) item.StatusCode = StatusCodes.BadNoCommunication;
+        item.StatusCode = StatusCodes.Good;
+        Console.WriteLine($"  >> WriteValidation: {item.Path} = {item.Value}");
+    }
+};
+
+// ValuesWritten — called AFTER a successful write. The client already received Good.
 server.ValuesWritten += (s, e) =>
 {
     foreach (var item in e.Items)
-        Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}");
+        Console.WriteLine($"  << Written: {item.Path} ({item.NodeId}) = {item.Value}");
 };
 
 Console.Write("Starting server ... ");
@@ -412,7 +453,7 @@ while (true)
 // =============================================================================
 static UaServerConfiguration CreateConfig()
 {
-    return new UaServerConfiguration
+    var config = new UaServerConfiguration
     {
         // ── Application Identity ──────────────────────────────────────────────
         ApplicationName  = "PLCcom Workshop 19 - Advanced Server",
@@ -442,8 +483,6 @@ static UaServerConfiguration CreateConfig()
         },
 
         // ── PKI Certificate Store ─────────────────────────────────────────────
-        CertificateStorePath        = @".\pki",
-        CertificateLifetimeInMonths = 60,
         AutoAcceptUntrustedCertificates = false,
         // ── Endpoint Host Normalization ───────────────────────────────────────
         // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
@@ -472,6 +511,40 @@ static UaServerConfiguration CreateConfig()
         MaxNodesPerNodeManagement            = 1000,
         MaxMonitoredItemsPerCall             = 1000,
     };
+
+    // -- PKI Certificate Store ------------------------------------------------
+    // UaServerCertificateStore verwaltet alle Server-Zertifikate.
+    // Load() versucht vorhandene Zertifikate von Disk zu laden.
+    // GetMissingOrExpired() liefert alle fehlenden oder abgelaufenen Zertifikate.
+    // Build(true) erstellt ein neues selbstsigniertes Zertifikat.
+    var certs = new List<UaServerCertificate>
+    {
+        new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          Assembly.GetEntryAssembly().GetName().Name,
+            applicationUri: config.ApplicationUri,
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Application)
+    };
+
+    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
+        certs.Add(new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          host,
+            applicationUri: $"urn:{host}:https",
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Https));
+
+    var store = UaServerCertificateStore.Load(@".\pki", certs);
+    foreach (var missing in store.GetMissingOrExpired())
+        missing.Build(overwrite: true);
+    config.SetCertificateStore(store);
+
+    return config;
 }
 
 // =============================================================================
@@ -479,26 +552,45 @@ static UaServerConfiguration CreateConfig()
 // =============================================================================
 static void PrintConfig(UaServerConfiguration config)
 {
-    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
+    Console.WriteLine("-- Active Server Configuration ------------------------------");
     Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
     Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
-    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default: ApplicationUri + /nodes)"}");
     Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
     Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
     Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
     Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
     Console.WriteLine();
     Console.WriteLine("  Endpoints:");
-    foreach (var addr in config.BaseAddresses) Console.WriteLine($"    {addr}");
+    foreach (var addr in config.BaseAddresses)
+        Console.WriteLine($"    {addr}");
     Console.WriteLine();
-        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
-    Console.WriteLine("  VendorServerInfo:");
-    Console.WriteLine($"    VendorName={config.VendorName ?? "(not set)"}  ProductName={config.VendorProductName ?? "(not set)"}  Version={config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
     Console.WriteLine();
-    Console.WriteLine("  OperationLimits:");
-    Console.WriteLine($"    Read={config.MaxNodesPerRead}  Write={config.MaxNodesPerWrite}  Browse={config.MaxNodesPerBrowse}  Method={config.MaxNodesPerMethodCall}");
-    Console.WriteLine($"    HistRD={config.MaxNodesPerHistoryReadData}  HistRE={config.MaxNodesPerHistoryReadEvents}  HistUD={config.MaxNodesPerHistoryUpdateData}  HistUE={config.MaxNodesPerHistoryUpdateEvents}");
-    Console.WriteLine($"    Register={config.MaxNodesPerRegisterNodes}  Translate={config.MaxNodesPerTranslateBrowsePathsToNodeIds}  NodeMgmt={config.MaxNodesPerNodeManagement}  MonItems={config.MaxMonitoredItemsPerCall}");
-    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine("  Certificate Store:");
+    if (config.CertificateStore != null)
+        Console.WriteLine($"    {config.CertificateStore}");
+    else
+        Console.WriteLine("    (not set)");
+    Console.WriteLine();
+    Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
+    Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
+    Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
+    Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("-------------------------------------------------------------");
     Console.WriteLine();
 }

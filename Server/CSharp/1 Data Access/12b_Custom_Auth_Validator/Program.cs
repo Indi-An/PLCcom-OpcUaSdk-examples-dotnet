@@ -47,6 +47,7 @@ using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Server;
 using PLCcom.Opc.Ua.Server.Sdk;
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 
@@ -76,7 +77,13 @@ using var server = new UaServer(LicenseUserName, LicenseSerial);
 server.UserManager.CredentialValidator = new MyCredentialValidator();
 server.UserManager.PermissionValidator = new MyPermissionValidator();
 
+// Accept all client certificates automatically.
+// WARNING: Do NOT use this in production! Either implement your own validation
+// logic here (inspect e.Certificate and e.Error, then set e.Accept = true or false),
+// or remove this handler entirely -- the SDK will then automatically validate
+// certificates against the PKI trust store (pki/trusted/certs/).
 server.CertificateValidation += (sender, e) => { e.Accept = true; };
+
 server.SessionCreated += (s, e) => Console.WriteLine($"  [SESSION+] {e.SessionName ?? "unknown"}");
 server.SessionClosed  += (s, e) => Console.WriteLine($"  [SESSION-] {e.SessionName ?? "unknown"}");
 server.ValuesWritten  += (s, e) =>
@@ -123,7 +130,7 @@ Console.ReadLine();
 // =============================================================================
 static UaServerConfiguration CreateConfig()
 {
-    return new UaServerConfiguration
+    var config = new UaServerConfiguration
     {
         ApplicationName  = "PLCcom Workshop 12b - Custom Auth Validator",
         ApplicationUri   = "urn:localhost:PLCcom:Workshop:12b",
@@ -144,8 +151,6 @@ static UaServerConfiguration CreateConfig()
             new UserTokenPolicy { TokenType = UserTokenType.UserName },
             new UserTokenPolicy { TokenType = UserTokenType.Certificate }
         },
-        CertificateStorePath            = @".\pki",
-        CertificateLifetimeInMonths     = 60,
         AutoAcceptUntrustedCertificates = false,
         // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
         // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
@@ -169,6 +174,40 @@ static UaServerConfiguration CreateConfig()
         MaxNodesPerNodeManagement                = 1000,
         MaxMonitoredItemsPerCall                 = 1000,
     };
+
+    // -- PKI Certificate Store ------------------------------------------------
+    // UaServerCertificateStore verwaltet alle Server-Zertifikate.
+    // Load() versucht vorhandene Zertifikate von Disk zu laden.
+    // GetMissingOrExpired() liefert alle fehlenden oder abgelaufenen Zertifikate.
+    // Build(true) erstellt ein neues selbstsigniertes Zertifikat.
+    var certs = new List<UaServerCertificate>
+    {
+        new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          Assembly.GetEntryAssembly().GetName().Name,
+            applicationUri: config.ApplicationUri,
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Application)
+    };
+
+    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
+        certs.Add(new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          host,
+            applicationUri: $"urn:{host}:https",
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Https));
+
+    var store = UaServerCertificateStore.Load(@".\pki", certs);
+    foreach (var missing in store.GetMissingOrExpired())
+        missing.Build(overwrite: true);
+    config.SetCertificateStore(store);
+
+    return config;
 }
 
 // =============================================================================
@@ -176,18 +215,46 @@ static UaServerConfiguration CreateConfig()
 // =============================================================================
 static void PrintConfig(UaServerConfiguration config)
 {
-    Console.WriteLine("── Active Server Configuration ──────────────────────────────");
-    Console.WriteLine($"  ApplicationName : {config.ApplicationName}");
-    Console.WriteLine($"  ApplicationUri  : {config.ApplicationUri}");
-    Console.WriteLine($"  NamespaceUri    : {config.NamespaceUri ?? "(default)"}");
+    Console.WriteLine("-- Active Server Configuration ------------------------------");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default: ApplicationUri + /nodes)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
     Console.WriteLine();
     Console.WriteLine("  Endpoints:");
     foreach (var addr in config.BaseAddresses)
         Console.WriteLine($"    {addr}");
     Console.WriteLine();
-    Console.WriteLine("  Authentication: UserName + Certificate (Anonymous disabled)");
     Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
-    Console.WriteLine("─────────────────────────────────────────────────────────────");
+    Console.WriteLine();
+    Console.WriteLine("  Certificate Store:");
+    if (config.CertificateStore != null)
+        Console.WriteLine($"    {config.CertificateStore}");
+    else
+        Console.WriteLine("    (not set)");
+    Console.WriteLine();
+    Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
+    Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
+    Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
+    Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("-------------------------------------------------------------");
     Console.WriteLine();
 }
 

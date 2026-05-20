@@ -19,10 +19,6 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
-Imports PLCcom.Opc.Ua
-Imports PLCcom.Opc.Ua.Server.Sdk
-Imports System
-Imports System.Collections.Generic
 
 ' ==============================================================================
 ' PLCcom OPC UA Server SDK - Workshop 13: Methods
@@ -44,6 +40,11 @@ Imports System.Collections.Generic
 ' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
 
+Imports PLCcom.Opc.Ua
+Imports PLCcom.Opc.Ua.Server.Sdk
+Imports System
+Imports System.Collections.Generic
+Imports System.Reflection
 Module Program
 
     Sub Main(args As String())
@@ -85,16 +86,56 @@ Module Program
             .ProductName = "My OPC UA Server",
             .SoftwareVersion = "1.0.0",
             .BuildNumber = "42",
-            .NamespaceUri = "http://indi-an.com/opcua/workshop/methods",
-            .CertificateStorePath = ".\pki"
+            .NamespaceUri = "http://indi-an.com/opcua/workshop/methods"
         }
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
+
+            ' Accept all client certificates automatically.
+            ' WARNING: Do Not use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate And e.Error, then set e.Accept = true Or false),
+            ' Or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
 
+            ' WriteValidation — called BEFORE any client write is committed to the address space.
+            ' All internal checks (AccessLevel, DataType, Permissions) have already passed.
+            ' The handler receives ALL items of the write request as a batch.
+            ' Set item.StatusCode to any Bad_* value to reject that specific item.
+            '
+            ' You can also MODIFY the value before it is written by setting item.Value.
+            ' The modified value is then stored in the address space instead of the original.
+            '
+            ' !! IMPORTANT — PERFORMANCE WARNING !!
+            ' This handler runs synchronously on the server's write thread.
+            ' Any blocking operation (device I/O, database, slow network) will stall
+            ' the entire write request and can block other clients as well.
+            '
+            ' If you need to forward the value to a device, prefer one of these patterns:
+            '   a) Accept immediately (Good) and forward asynchronously via Task.Run or a queue.
+            '      The OPC UA client gets a fast response; the device update happens in the background.
+            '   b) If you must wait for the device, always use a short timeout (e.g. 500 ms)
+            '      and return BadTimeout or BadNoCommunication if the device does not respond in time.
+            '
+            ' Never await or block indefinitely inside this handler.
+            AddHandler server.WriteValidation, Sub(s, e)
+                                                   For Each item In e.Items
+                                                       ' Example: accept immediately and forward to device asynchronously
+                                                       ' Task.Run(Sub() plc.WriteValue(item.Path, item.Value))
+                                                       '
+                                                       ' Example: forward synchronously with timeout, reject on failure
+                                                       ' If Not plc.WriteValue(item.Path, item.Value, timeoutMs:=500) Then item.StatusCode = StatusCodes.BadNoCommunication
+                                                       item.StatusCode = StatusCodes.Good
+                                                       Console.WriteLine($"  >> WriteValidation: {item.Path} = {item.Value}")
+                                                   Next
+                                               End Sub
+
+            ' ValuesWritten — called AFTER a successful write. The client already received Good.
+            ' Use this for logging, synchronization, or triggering side effects.
+            ' Note: If WriteValidation rejects an item, ValuesWritten does NOT fire for that item.
             AddHandler server.ValuesWritten, Sub(s, e)
                                                  For Each item In e.Items
-                                                     Console.WriteLine($"  << OPC Write: {item.Path} ({item.NodeId}) = {item.Value}")
+                                                     Console.WriteLine($"  << Written: {item.Path} ({item.NodeId}) = {item.Value}")
                                                  Next
                                              End Sub
 
@@ -139,12 +180,12 @@ Module Program
             ' -- Method 2: Add (two inputs, one output) ------------------------
             server.CreateMethod(machine, "Add",
                 Function(ctx, method, objectId, inputArgs, outputArgs)
-                             Dim a As Double = CDbl(inputArgs(0))
-                             Dim b As Double = CDbl(inputArgs(1))
-                             outputArgs(0) = a + b
-                             Console.WriteLine($"  [METHOD] Add({a}, {b}) = {a + b}")
-                             Return ServiceResult.Good
-                         End Function,
+                    Dim a As Double = CDbl(inputArgs(0))
+                    Dim b As Double = CDbl(inputArgs(1))
+                    outputArgs(0) = a + b
+                    Console.WriteLine($"  [METHOD] Add({a}, {b}) = {a + b}")
+                    Return ServiceResult.Good
+                End Function,
                 UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "A", .DataType = DataTypeIds.Double,
@@ -160,12 +201,12 @@ Module Program
             ' -- Method 3: Multiply (two inputs, one output) -------------------
             server.CreateMethod(machine, "Multiply",
                 Function(ctx, method, objectId, inputArgs, outputArgs)
-                             Dim a As Double = CDbl(inputArgs(0))
-                             Dim b As Double = CDbl(inputArgs(1))
-                             outputArgs(0) = a * b
-                             Console.WriteLine($"  [METHOD] Multiply({a}, {b}) = {a * b}")
-                             Return ServiceResult.Good
-                         End Function,
+                    Dim a As Double = CDbl(inputArgs(0))
+                    Dim b As Double = CDbl(inputArgs(1))
+                    outputArgs(0) = a * b
+                    Console.WriteLine($"  [METHOD] Multiply({a}, {b}) = {a * b}")
+                    Return ServiceResult.Good
+                End Function,
                 UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "A", .DataType = DataTypeIds.Double,
@@ -181,11 +222,11 @@ Module Program
             ' -- Method 4: SetTemperature (modifies server state) --------------
             server.CreateMethod(machine, "SetTemperature",
                 Function(ctx, method, objectId, inputArgs, outputArgs)
-                             Dim newTemp As Double = CDbl(inputArgs(0))
-                             temp.Value = newTemp
-                             Console.WriteLine($"  [METHOD] SetTemperature({newTemp:F1}) -> Temperature updated")
-                             Return ServiceResult.Good
-                         End Function,
+                    Dim newTemp As Double = CDbl(inputArgs(0))
+                    temp.Value = newTemp
+                    Console.WriteLine($"  [METHOD] SetTemperature({newTemp:F1}) -> Temperature updated")
+                    Return ServiceResult.Good
+                End Function,
                 UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "NewTemperature", .DataType = DataTypeIds.Double,
@@ -210,29 +251,29 @@ Module Program
 
             server.CreateMethod(myObjectNode.NodeId, "myMethodNode",
                 Function(ctx, method, objectId, inputArgs, outputArgs)
-                             Try
-                                 Dim ext = TryCast(inputArgs(0), ExtensionObject)
-                                 Dim body = TryCast(ext?.Body, Byte())
-                                 If body IsNot Nothing Then
-                                     Dim ctx2 As New ServiceMessageContext(Nothing)
-                                     Using decoder As New BinaryDecoder(body, ctx2)
-                                         Dim v1 As Integer = decoder.ReadInt32("")
-                                         Dim v2 As String = decoder.ReadString("")
-                                         Dim v3 As Integer = decoder.ReadInt32("")
-                                         Dim v4 As Integer = decoder.ReadInt32("")
-                                         Dim v5 As String = decoder.ReadString("")
-                                         Console.WriteLine($"  [METHOD] myMethodNode called: {v1}, {v2}, {v3}, {v4}, {v5}")
-                                         outputArgs(0) = $"Received: {v1} | {v2} | {v3} | {v4} | {v5}"
-                                     End Using
-                                 Else
-                                     outputArgs(0) = "No input received"
-                                 End If
-                             Catch ex As Exception
-                                 Console.WriteLine($"  [METHOD] myMethodNode error: {ex.Message}")
-                                 outputArgs(0) = $"Error: {ex.Message}"
-                             End Try
-                             Return ServiceResult.Good
-                         End Function,
+                    Try
+                        Dim ext = TryCast(inputArgs(0), ExtensionObject)
+                        Dim body = TryCast(ext?.Body, Byte())
+                        If body IsNot Nothing Then
+                            Dim ctx2 As New ServiceMessageContext(Nothing)
+                            Using decoder As New BinaryDecoder(body, ctx2)
+                                Dim v1 As Integer = decoder.ReadInt32("")
+                                Dim v2 As String = decoder.ReadString("")
+                                Dim v3 As Integer = decoder.ReadInt32("")
+                                Dim v4 As Integer = decoder.ReadInt32("")
+                                Dim v5 As String = decoder.ReadString("")
+                                Console.WriteLine($"  [METHOD] myMethodNode called: {v1}, {v2}, {v3}, {v4}, {v5}")
+                                outputArgs(0) = $"Received: {v1} | {v2} | {v3} | {v4} | {v5}"
+                            End Using
+                        Else
+                            outputArgs(0) = "No input received"
+                        End If
+                    Catch ex As Exception
+                        Console.WriteLine($"  [METHOD] myMethodNode error: {ex.Message}")
+                        outputArgs(0) = $"Error: {ex.Message}"
+                    End Try
+                    Return ServiceResult.Good
+                End Function,
                 UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "DataStructure_One", .DataType = DataTypeIds.Structure,
@@ -259,48 +300,48 @@ Module Program
 
             server.CreateMethod(myObjectNodeAdv.NodeId, "myMethodNode",
                 Function(ctx, method, objectId, inputArgs, outputArgs)
-                             Try
-                                 Dim ext = TryCast(inputArgs(0), ExtensionObject)
-                                 Dim body = TryCast(ext?.Body, Byte())
-                                 If body IsNot Nothing Then
-                                     Dim ctx2 As New ServiceMessageContext(Nothing)
-                                     Using decoder As New BinaryDecoder(body, ctx2)
-                                         Dim v1 As Integer = decoder.ReadInt32("")
-                                         Dim v2 As String = decoder.ReadString("")
+                    Try
+                        Dim ext = TryCast(inputArgs(0), ExtensionObject)
+                        Dim body = TryCast(ext?.Body, Byte())
+                        If body IsNot Nothing Then
+                            Dim ctx2 As New ServiceMessageContext(Nothing)
+                            Using decoder As New BinaryDecoder(body, ctx2)
+                                Dim v1 As Integer = decoder.ReadInt32("")
+                                Dim v2 As String = decoder.ReadString("")
 
-                                         ' embedded DataStructure_Two
-                                         Dim embExt = decoder.ReadExtensionObject("")
-                                         Dim embSummary As String = "(empty)"
-                                         Dim embBody = TryCast(embExt?.Body, Byte())
-                                         If embBody IsNot Nothing Then
-                                             Using d2 As New BinaryDecoder(embBody, ctx2)
-                                                 Dim e1 As Integer = d2.ReadInt32("")
-                                                 Dim e2 As String = d2.ReadString("")
-                                                 Dim e3 As Integer = d2.ReadInt32("")
-                                                 embSummary = $"{e1},{e2},{e3}"
-                                             End Using
-                                         End If
+                                ' embedded DataStructure_Two
+                                Dim embExt = decoder.ReadExtensionObject("")
+                                Dim embSummary As String = "(empty)"
+                                Dim embBody = TryCast(embExt?.Body, Byte())
+                                If embBody IsNot Nothing Then
+                                    Using d2 As New BinaryDecoder(embBody, ctx2)
+                                        Dim e1 As Integer = d2.ReadInt32("")
+                                        Dim e2 As String = d2.ReadString("")
+                                        Dim e3 As Integer = d2.ReadInt32("")
+                                        embSummary = $"{e1},{e2},{e3}"
+                                    End Using
+                                End If
 
-                                         Dim v3 As Integer = decoder.ReadInt32("")
+                                Dim v3 As Integer = decoder.ReadInt32("")
 
-                                         ' array of DataStructure_Two
-                                         Dim arr = decoder.ReadExtensionObjectArray("")
-                                         Dim arrCount As Integer = If(arr IsNot Nothing, arr.Count, 0)
+                                ' array of DataStructure_Two
+                                Dim arr = decoder.ReadExtensionObjectArray("")
+                                Dim arrCount As Integer = If(arr IsNot Nothing, arr.Count, 0)
 
-                                         Dim v4 As Integer = decoder.ReadInt32("")
+                                Dim v4 As Integer = decoder.ReadInt32("")
 
-                                         Console.WriteLine($"  [METHOD_ADV] myMethodNode: v1={v1} v2={v2} emb=[{embSummary}] v3={v3} arr={arrCount} items v4={v4}")
-                                         outputArgs(0) = $"Received: {v1} | {v2} | emb=[{embSummary}] | v3={v3} | arr={arrCount} | v4={v4}"
-                                     End Using
-                                 Else
-                                     outputArgs(0) = "No input received"
-                                 End If
-                             Catch ex As Exception
-                                 Console.WriteLine($"  [METHOD_ADV] error: {ex.Message}")
-                                 outputArgs(0) = $"Error: {ex.Message}"
-                             End Try
-                             Return ServiceResult.Good
-                         End Function,
+                                Console.WriteLine($"  [METHOD_ADV] myMethodNode: v1={v1} v2={v2} emb=[{embSummary}] v3={v3} arr={arrCount} items v4={v4}")
+                                outputArgs(0) = $"Received: {v1} | {v2} | emb=[{embSummary}] | v3={v3} | arr={arrCount} | v4={v4}"
+                            End Using
+                        Else
+                            outputArgs(0) = "No input received"
+                        End If
+                    Catch ex As Exception
+                        Console.WriteLine($"  [METHOD_ADV] error: {ex.Message}")
+                        outputArgs(0) = $"Error: {ex.Message}"
+                    End Try
+                    Return ServiceResult.Good
+                End Function,
                 UaRolePermissions.WITHOUT_RESTRICTIONS,
                 inputArgs:=New Argument() {
                     New Argument With {.Name = "DataStructure_One", .DataType = DataTypeIds.Structure,
@@ -356,8 +397,6 @@ Module Program
         cfg.BaseAddresses = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"}
         cfg.SecurityPolicies = UaServer.GetRecommendedSecurityPolicies()
         cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
-        cfg.CertificateStorePath = ".\pki"
-        cfg.CertificateLifetimeInMonths = 60
         cfg.AutoAcceptUntrustedCertificates = False
         ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
         ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
@@ -374,33 +413,93 @@ Module Program
         cfg.MaxNodesPerMethodCall = 200 : cfg.MaxNodesPerRegisterNodes = 1000
         cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
         cfg.MaxNodesPerNodeManagement = 1000 : cfg.MaxMonitoredItemsPerCall = 1000
-        Return cfg
+
+        ' -- PKI Certificate Store -----------------------------------------------
+        ' UaServerCertificateStore manages all server certificates.
+        ' Load() tries to load existing certificates from disk.
+        ' GetMissingOrExpired() returns certificates that need to be (re)created.
+        ' Build(overwrite:=True) creates a new self-signed certificate on disk.
+        ''
+        ' One Application certificate is required for the OPC UA secure channel.
+        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        Dim certs As New List(Of UaServerCertificate) From {
+            New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=Assembly.GetEntryAssembly().GetName().Name,
+                applicationUri:=cfg.ApplicationUri,
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Application)
+        }
+
+        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
+            certs.Add(New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=host,
+                applicationUri:=$"urn:{host}:https",
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Https))
+        Next
+
+        Dim store = UaServerCertificateStore.Load(".\pki", certs)
+        For Each missing In store.GetMissingOrExpired()
+            missing.Build(overwrite:=True)
+        Next
+        cfg.SetCertificateStore(store)
+                Return cfg
     End Function
 
     ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+' ==========================================================================
     ' Helper: PrintConfig
     ' ==========================================================================
     Private Sub PrintConfig(config As UaServerConfiguration)
         Console.WriteLine("-- Active Server Configuration ------------------------------")
         Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
         Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
-        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default: ApplicationUri + /nodes)"))
         Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
         Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
         Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
         Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
         Console.WriteLine()
         Console.WriteLine("  Endpoints:")
-        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        For Each addr In config.BaseAddresses
+            Console.WriteLine("    " & addr)
+        Next
         Console.WriteLine()
-                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
-        Console.WriteLine("  VendorServerInfo:")
-        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
         Console.WriteLine()
-        Console.WriteLine("  OperationLimits:")
-        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
-        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
-        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("  Certificate Store:")
+        If config.CertificateStore IsNot Nothing Then
+            Console.WriteLine("    " & config.CertificateStore.ToString())
+        Else
+            Console.WriteLine("    (not set)")
+        End If
+        Console.WriteLine()
+        Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):")
+        Console.WriteLine("    VendorName           = " & If(config.VendorName, "(not set)"))
+        Console.WriteLine("    VendorProductName    = " & If(config.VendorProductName, "(not set)"))
+        Console.WriteLine("    VendorProductVersion = " & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):")
+        Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}")
+        Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}")
+        Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}")
+        Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}")
+        Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}")
+        Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}")
+        Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}")
+        Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}")
         Console.WriteLine("-------------------------------------------------------------")
         Console.WriteLine()
     End Sub

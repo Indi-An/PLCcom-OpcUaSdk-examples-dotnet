@@ -87,7 +87,7 @@ class Program
             // -- License ----------------------------------------------------------
             // TODO: Replace with your license credentials from your license e-mail
             string LicenseUserName = "<Enter your UserName here>";
-            string LicenseSerial   = "<Enter your Serial here>";
+            string LicenseSerial = "<Enter your Serial here>";
 
             // -- Step 1: Discover endpoints ---------------------------------------
             var endpoints = UaClient.GetEndpoints(new Uri("opc.tcp://localhost:48410"),
@@ -115,16 +115,13 @@ class Program
             }
 
             // -- Step 2: Build SessionConfiguration -------------------------------
-            var sessionConfig = SessionConfiguration.Build(
-                System.Reflection.Assembly.GetEntryAssembly().GetName().Name,
-                endpoints[idx]);
-            sessionConfig.AutoConnect = false;
+            var sessionConfig = CreateConfig(endpoints[idx]);
 
             // -- Step 3: Create client and connect --------------------------------
             using var client = new UaClient(LicenseUserName, LicenseSerial, sessionConfig);
             client.CertificateValidation += CertificateValidationHandler;
-            client.ServerConnected       += (s, e) => Console.WriteLine($"  {DateTime.Now:T} Connected");
-            client.ServerConnectionLost  += (s, e) => Console.WriteLine($"  {DateTime.Now:T} Connection lost");
+            client.ServerConnected += (s, e) => Console.WriteLine($"  {DateTime.Now:T} Connected");
+            client.ServerConnectionLost += (s, e) => Console.WriteLine($"  {DateTime.Now:T} Connection lost");
 
             Console.Write("  Connecting ... ");
             client.Connect();
@@ -167,125 +164,125 @@ class Program
                     switch (input)
                     {
                         case "1": // Insert - add a new value, fails if timestamp already exists
-                        {
-                            Console.Write("  Value to insert: ");
-                            var dv = new DataValue
                             {
-                                SourceTimestamp = DateTime.UtcNow,
-                                Value           = double.Parse(Console.ReadLine())
-                            };
-                            var result = client.Insert(nodeId, new List<DataValue> { dv });
-                            PrintResult(result[0]);
-                            break;
-                        }
+                                Console.Write("  Value to insert: ");
+                                var dv = new DataValue
+                                {
+                                    SourceTimestamp = DateTime.UtcNow,
+                                    Value = double.Parse(Console.ReadLine())
+                                };
+                                var result = client.Insert(nodeId, new List<DataValue> { dv });
+                                PrintResult(result[0]);
+                                break;
+                            }
 
                         case "2": // Update - insert if not exists, replace if exists (upsert)
-                        {
-                            Console.Write("  Value to update: ");
-                            var dv = new DataValue
                             {
-                                SourceTimestamp = DateTime.UtcNow,
-                                Value           = double.Parse(Console.ReadLine())
-                            };
-                            var result = client.Update(nodeId, new List<DataValue> { dv });
-                            PrintResult(result[0]);
-                            break;
-                        }
+                                Console.Write("  Value to update: ");
+                                var dv = new DataValue
+                                {
+                                    SourceTimestamp = DateTime.UtcNow,
+                                    Value = double.Parse(Console.ReadLine())
+                                };
+                                var result = client.Update(nodeId, new List<DataValue> { dv });
+                                PrintResult(result[0]);
+                                break;
+                            }
 
                         case "3": // Replace - replace existing value at a stored timestamp
-                        {
-                            // Replace requires the exact timestamp of an existing entry.
-                            // We read the last stored value and replace it.
-                            var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow, false);
-                            if (existing?.DataValues == null || existing.DataValues.Count == 0)
                             {
-                                Console.WriteLine("  No existing values. Insert first.");
+                                // Replace requires the exact timestamp of an existing entry.
+                                // We read the last stored value and replace it.
+                                var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow, false);
+                                if (existing?.DataValues == null || existing.DataValues.Count == 0)
+                                {
+                                    Console.WriteLine("  No existing values. Insert first.");
+                                    break;
+                                }
+                                var last = existing.DataValues[^1];
+                                Console.WriteLine($"  Replacing value at {last.SourceTimestamp.ToLocalTime():T} (was {last.Value})");
+                                Console.Write("  New value: ");
+                                var dv = new DataValue
+                                {
+                                    SourceTimestamp = last.SourceTimestamp,
+                                    Value = double.Parse(Console.ReadLine())
+                                };
+                                var result = client.Replace(nodeId, new List<DataValue> { dv });
+                                PrintResult(result[0]);
                                 break;
                             }
-                            var last = existing.DataValues[^1];
-                            Console.WriteLine($"  Replacing value at {last.SourceTimestamp.ToLocalTime():T} (was {last.Value})");
-                            Console.Write("  New value: ");
-                            var dv = new DataValue
-                            {
-                                SourceTimestamp = last.SourceTimestamp,
-                                Value           = double.Parse(Console.ReadLine())
-                            };
-                            var result = client.Replace(nodeId, new List<DataValue> { dv });
-                            PrintResult(result[0]);
-                            break;
-                        }
 
                         case "4": // Remove - remove the last stored value
-                        {
-                            // Remove requires the exact timestamp of an existing entry.
-                            var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow, false);
-                            if (existing?.DataValues == null || existing.DataValues.Count == 0)
                             {
-                                Console.WriteLine("  No existing values.");
+                                // Remove requires the exact timestamp of an existing entry.
+                                var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow, false);
+                                if (existing?.DataValues == null || existing.DataValues.Count == 0)
+                                {
+                                    Console.WriteLine("  No existing values.");
+                                    break;
+                                }
+                                var last = existing.DataValues[^1];
+                                Console.WriteLine($"  Removing value at {last.SourceTimestamp.ToLocalTime():T} (value={last.Value})");
+                                var dv = new DataValue { SourceTimestamp = last.SourceTimestamp };
+                                var result = client.Remove(nodeId, new List<DataValue> { dv });
+                                PrintResult(result[0]);
                                 break;
                             }
-                            var last = existing.DataValues[^1];
-                            Console.WriteLine($"  Removing value at {last.SourceTimestamp.ToLocalTime():T} (value={last.Value})");
-                            var dv = new DataValue { SourceTimestamp = last.SourceTimestamp };
-                            var result = client.Remove(nodeId, new List<DataValue> { dv });
-                            PrintResult(result[0]);
-                            break;
-                        }
 
                         case "5": // DeleteRaw - delete all values in a time range
-                        {
-                            // isModified=false: delete original recorded values
-                            var result = client.DeleteRaw(nodeId,
-                                DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow,
-                                isModified: false);
-                            foreach (var r in result)
-                                Console.WriteLine("  Result: " + r.StatusCode.ToString());
-                            break;
-                        }
-
-                        case "6": // DeleteModified - delete modified values in a time range
-                        {
-                            // isModified=true: delete only values that were modified
-                            // after original recording (e.g. via Insert/Update/Replace)
-                            var result = client.DeleteRaw(nodeId,
-                                DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow,
-                                isModified: true);
-                            foreach (var r in result)
-                                Console.WriteLine("  Result: " + r.StatusCode.ToString());
-                            break;
-                        }
-
-                        case "7": // DeleteAtTime - delete values at exact stored timestamps
-                        {
-                            // DeleteAtTime requires exact timestamps that exist in the history.
-                            // We read the last stored values and delete those.
-                            var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow, false);
-                            if (existing?.DataValues == null || existing.DataValues.Count == 0)
                             {
-                                Console.WriteLine("  No existing values.");
+                                // isModified=false: delete original recorded values
+                                var result = client.DeleteRaw(nodeId,
+                                    DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow,
+                                    isModified: false);
+                                foreach (var r in result)
+                                    Console.WriteLine("  Result: " + r.StatusCode.ToString());
                                 break;
                             }
-                            int count = Math.Min(5, existing.DataValues.Count);
-                            var times = existing.DataValues.Take(count).Select(v => v.SourceTimestamp).ToList();
-                            Console.WriteLine($"  Before: {existing.DataValues.Count} values in last 2 minutes");
-                            Console.WriteLine($"  Deleting {count} values at exact stored timestamps:");
-                            for (int i = 0; i < times.Count; i++)
-                                Console.WriteLine($"    [{i}] {times[i].ToLocalTime():HH:mm:ss.fff}");
-                            var result = client.DeleteAtTime(nodeId, times);
-                            PrintResult(result[0]);
-                            var after = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow, false);
-                            Console.WriteLine($"  After:  {after?.DataValues?.Count ?? 0} values remaining");
-                            break;
-                        }
+
+                        case "6": // DeleteModified - delete modified values in a time range
+                            {
+                                // isModified=true: delete only values that were modified
+                                // after original recording (e.g. via Insert/Update/Replace)
+                                var result = client.DeleteRaw(nodeId,
+                                    DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow,
+                                    isModified: true);
+                                foreach (var r in result)
+                                    Console.WriteLine("  Result: " + r.StatusCode.ToString());
+                                break;
+                            }
+
+                        case "7": // DeleteAtTime - delete values at exact stored timestamps
+                            {
+                                // DeleteAtTime requires exact timestamps that exist in the history.
+                                // We read the last stored values and delete those.
+                                var existing = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow, false);
+                                if (existing?.DataValues == null || existing.DataValues.Count == 0)
+                                {
+                                    Console.WriteLine("  No existing values.");
+                                    break;
+                                }
+                                int count = Math.Min(5, existing.DataValues.Count);
+                                var times = existing.DataValues.Take(count).Select(v => v.SourceTimestamp).ToList();
+                                Console.WriteLine($"  Before: {existing.DataValues.Count} values in last 2 minutes");
+                                Console.WriteLine($"  Deleting {count} values at exact stored timestamps:");
+                                for (int i = 0; i < times.Count; i++)
+                                    Console.WriteLine($"    [{i}] {times[i].ToLocalTime():HH:mm:ss.fff}");
+                                var result = client.DeleteAtTime(nodeId, times);
+                                PrintResult(result[0]);
+                                var after = client.ReadRaw(nodeId, DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow, false);
+                                Console.WriteLine($"  After:  {after?.DataValues?.Count ?? 0} values remaining");
+                                break;
+                            }
 
                         case "8": // ReadRaw - verify changes by reading back
-                        {
-                            var values = client.ReadRaw(nodeId,
-                                DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow,
-                                isReadModified: false);
-                            PrintValues(values);
-                            break;
-                        }
+                            {
+                                var values = client.ReadRaw(nodeId,
+                                    DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow,
+                                    isReadModified: false);
+                                PrintValues(values);
+                                break;
+                            }
                     }
                 }
                 catch (Exception ex)
@@ -331,5 +328,77 @@ class Program
     void CertificateValidationHandler(CertificateValidator sender, CertificateValidationEventArgs e)
     {
         e.Accept = true;
+    }
+
+    // =============================================================================
+    // Helper: CreateConfig
+    // =============================================================================
+    // Builds the SessionConfiguration for the selected endpoint.
+    //
+    // Certificate handling:
+    //   Application certificate -- required for Sign / SignAndEncrypt endpoints.
+    //   HTTPS certificate       -- required for opc.https:// endpoints (any SecurityMode).
+    //
+    // UaClientCertificate derives file paths automatically from the PKI base directory:
+    //   pki/own/certs/<alias>.der    <- certificate
+    //   pki/own/private/<alias>.pem  <- private key
+    //
+    // Load() returns null if the certificate does not exist yet or cannot be read.
+    // Build(true) creates a new self-signed certificate, overwriting any existing file.
+    static SessionConfiguration CreateConfig(EndpointDescription endpoint)
+    {
+        string alias = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
+        SessionConfiguration config = SessionConfiguration.Build(alias, endpoint);
+        config.AutoConnect = false;
+
+        // HTTPS certificate -- required for opc.https:// endpoints, independent of SecurityMode.
+        UaClientCertificate httpsCert = null;
+        if (endpoint.EndpointUrl != null &&
+            endpoint.EndpointUrl.StartsWith("opc.https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string host = new Uri(endpoint.EndpointUrl).Host;
+            httpsCert = UaClientCertificate.Load("./pki", host, "secretpassword");
+            if (httpsCert == null || !httpsCert.CheckValidity())
+                httpsCert = new UaClientCertificate("./pki", "secretpassword", host, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // Application certificate -- required for secured endpoints (Sign or SignAndEncrypt).
+        // Not needed for SecurityMode.None (unencrypted connections).
+        UaClientCertificate appCert = null;
+        if (!endpoint.SecurityMode.Equals(MessageSecurityMode.None))
+        {
+            appCert = UaClientCertificate.Load("./pki", alias, "secretpassword");
+            if (appCert == null || !appCert.CheckValidity())
+                appCert = new UaClientCertificate("./pki", "secretpassword", alias, 720, "Indi.An GmbH")
+                    .Build(overwrite: true);
+        }
+
+        // SetInstanceCertificate() sets CertificateStorePath and ApplicationCertificateFullPath.
+        if (appCert != null && httpsCert != null)
+            config.SetInstanceCertificate(appCert, httpsCert);
+        else if (appCert != null)
+            config.SetInstanceCertificate(appCert);
+
+        return config;
+    }
+
+    // =============================================================================
+    // Helper: PrintConfig
+    // =============================================================================
+    // Prints the active client configuration to the console so you can verify
+    // all settings at a glance before connecting.
+    static void PrintConfig(SessionConfiguration config)
+    {
+        Console.WriteLine("-- Active Client Configuration ------------------------------");
+        if (config.Endpoint != null)
+        {
+            Console.WriteLine($"  Endpoint  : {config.Endpoint.EndpointUrl}");
+            Console.WriteLine($"  Security  : {config.Endpoint.ToDisplayString()}");
+        }
+        Console.WriteLine($"  PKI Store : {(config.CertificateStorePath != null ? config.CertificateStorePath : "(not set)")}");
+        Console.WriteLine($"  Cert File : {(config.ApplicationCertificateFullPath != null ? config.ApplicationCertificateFullPath : "(none -- SecurityMode.None)")}");
+        Console.WriteLine("-------------------------------------------------------------");
+        Console.WriteLine();
     }
 }

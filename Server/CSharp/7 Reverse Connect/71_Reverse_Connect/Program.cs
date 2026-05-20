@@ -36,7 +36,7 @@
 //   3. The client uses that connection to establish a normal OPC UA session
 //   4. From the application's perspective, the session works exactly the same
 //
-// This server also keeps its normal endpoint (48460) for direct connections.
+// This server also keeps its normal endpoint (48410) for direct connections.
 //
 // What you will learn:
 //   * How to add a reverse connection target to the server
@@ -50,14 +50,14 @@
 using PLCcom.Opc.Ua;
 using PLCcom.Opc.Ua.Server.Sdk;
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Threading;
 
 // -- License -------------------------------------------------------------------
-//TODO
-//Submit your license information from your license e-mail
+// TODO: Replace with your license credentials from your license e-mail
 string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial = "<Enter your Serial here>";
+string LicenseSerial   = "<Enter your Serial here>";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 71: Reverse Connect     ║");
@@ -83,13 +83,19 @@ var config = CreateConfig();
 PrintConfig(config);
 
 using var server = new UaServer(LicenseUserName, LicenseSerial);
+
+// Accept all client certificates automatically.
+// WARNING: Do NOT use this in production! Either implement your own validation
+// logic here (inspect e.Certificate and e.Error, then set e.Accept = true or false),
+// or remove this handler entirely -- the SDK will then automatically validate
+// certificates against the PKI trust store (pki/trusted/certs/).
 server.CertificateValidation += (s, e) =>
 {
     Console.WriteLine($"  [CERT] {e.Certificate.Subject} -> Accepted");
     e.Accept = true;
 };
 
-// Temporary: log all messages to see reverse connect activity
+// Log all SDK messages to see reverse connect activity
 server.LogMessage += (s, e) =>
 {
     Console.WriteLine($"  [{e.Level}] {e.Message}");
@@ -116,7 +122,7 @@ Console.WriteLine();
 
 // Create a variable to give the client something to read
 var plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS);
-var temp = server.CreateVariable<double>(plant, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 22.5);
+var temp  = server.CreateVariable<double>(plant, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue: 22.5);
 temp.SetEURange(0, 100);
 temp.SetEngineeringUnits("C");
 
@@ -181,19 +187,21 @@ while (true)
 // =============================================================================
 static UaServerConfiguration CreateConfig()
 {
-    return new UaServerConfiguration
+    var config = new UaServerConfiguration
     {
+        // ── Application Identity ──────────────────────────────────────────────
         ApplicationName = "PLCcom Workshop 71 - Reverse Connect",
-        ApplicationUri = "urn:localhost:PLCcom:Workshop:71",
-        ProductUri = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
-        NamespaceUri = "http://indi-an.com/opcua/workshop/reverse-connect",
+        ApplicationUri  = "urn:localhost:PLCcom:Workshop:71",
+        ProductUri      = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
+        NamespaceUri    = "http://indi-an.com/opcua/workshop/reverse-connect",
 
         // ── ServerStatus/BuildInfo ────────────────────────────────────────────
         ManufacturerName = "My Company GmbH",
-        ProductName = "My OPC UA Server",
-        SoftwareVersion = "1.0.0",
-        BuildNumber = "42",
-        // ── Endpoints ──────────────────────────────────────────────────────
+        ProductName      = "My OPC UA Server",
+        SoftwareVersion  = "1.0.0",
+        BuildNumber      = "42",
+
+        // ── Endpoints ────────────────────────────────────────────────────────
         BaseAddresses = new List<string>
         {
             "opc.tcp://localhost:48410",
@@ -209,35 +217,72 @@ static UaServerConfiguration CreateConfig()
             new UserTokenPolicy { TokenType = UserTokenType.Anonymous }
         },
 
-        // ── PKI Certificate Store ─────────────────────────────────────────────
-        CertificateStorePath        = @".\pki",
-        CertificateLifetimeInMonths = 60,
         AutoAcceptUntrustedCertificates = false,
 
-        // ── Endpoint Host Normalization ───────────────────────────────────────
         // AsConfigured (default) = endpoints use exactly the host from BaseAddresses
         // NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
         // None                   = no normalization, behavior depends on DNS and network settings
         EndpointHostMode = EndpointHostMode.AsConfigured,
 
         MaxSessionCount = 100,
-        ShutdownDelay = 5,
-        VendorName = "My Company GmbH",
-        VendorProductName = "My OPC UA Server",
+        ShutdownDelay   = 5,
+
+        // ── VendorServerInfo ──────────────────────────────────────────────────
+        VendorName           = "My Company GmbH",
+        VendorProductName    = "My OPC UA Server",
         VendorProductVersion = "1.0.0",
-        MaxNodesPerRead = 1000,
-        MaxNodesPerWrite = 1000,
-        MaxNodesPerBrowse = 1000,
-        MaxNodesPerHistoryReadData = 100,
-        MaxNodesPerHistoryReadEvents = 100,
-        MaxNodesPerHistoryUpdateData = 100,
-        MaxNodesPerHistoryUpdateEvents = 100,
-        MaxNodesPerMethodCall = 200,
-        MaxNodesPerRegisterNodes = 1000,
+
+        // ── OperationLimits ───────────────────────────────────────────────────
+        MaxNodesPerRead                          = 1000,
+        MaxNodesPerWrite                         = 1000,
+        MaxNodesPerBrowse                        = 1000,
+        MaxNodesPerHistoryReadData               = 100,
+        MaxNodesPerHistoryReadEvents             = 100,
+        MaxNodesPerHistoryUpdateData             = 100,
+        MaxNodesPerHistoryUpdateEvents           = 100,
+        MaxNodesPerMethodCall                    = 200,
+        MaxNodesPerRegisterNodes                 = 1000,
         MaxNodesPerTranslateBrowsePathsToNodeIds = 1000,
-        MaxNodesPerNodeManagement = 1000,
-        MaxMonitoredItemsPerCall = 1000,
+        MaxNodesPerNodeManagement                = 1000,
+        MaxMonitoredItemsPerCall                 = 1000,
     };
+
+    // ── PKI Certificate Store ─────────────────────────────────────────────────
+    // UaServerCertificateStore manages all server certificates.
+    // Load() tries to load existing certificates from disk.
+    // GetMissingOrExpired() returns certificates that need to be (re)created.
+    // Build(overwrite: true) creates a new self-signed certificate on disk.
+    //
+    // One Application certificate is required for the OPC UA secure channel.
+    // One HTTPS certificate is added per opc.https:// hostname automatically.
+    var certs = new List<UaServerCertificate>
+    {
+        new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          Assembly.GetEntryAssembly().GetName().Name,
+            applicationUri: config.ApplicationUri,
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Application)
+    };
+
+    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
+        certs.Add(new UaServerCertificate(
+            pkiBase:        @".\pki",
+            password:       "secretpassword",
+            alias:          host,
+            applicationUri: $"urn:{host}:https",
+            validityDays:   720,
+            organisation:   "Indi.An GmbH",
+            role:           UaServerCertificate.CertificateRole.Https));
+
+    var store = UaServerCertificateStore.Load(@".\pki", certs);
+    foreach (var missing in store.GetMissingOrExpired())
+        missing.Build(overwrite: true);
+    config.SetCertificateStore(store);
+
+    return config;
 }
 
 // =============================================================================
@@ -245,33 +290,45 @@ static UaServerConfiguration CreateConfig()
 // =============================================================================
 static void PrintConfig(UaServerConfiguration config)
 {
-    Console.WriteLine("-- Active Server Configuration ------------------------------");
-    Console.WriteLine("  ApplicationName  : " + config.ApplicationName);
-    Console.WriteLine("  ApplicationUri   : " + config.ApplicationUri);
-    Console.WriteLine("  NamespaceUri     : " + (config.NamespaceUri ?? "(default)"));
-    Console.WriteLine("  ManufacturerName : " + (config.ManufacturerName ?? "(not set)"));
-    Console.WriteLine("  ProductName      : " + (config.ProductName ?? "(not set)"));
-    Console.WriteLine("  SoftwareVersion  : " + (config.SoftwareVersion ?? "(auto-detect)"));
-    Console.WriteLine("  BuildNumber      : " + (config.BuildNumber ?? "(auto-detect)"));
+    Console.WriteLine("── Active Server Configuration ──────────────────────────────────────────────");
+    Console.WriteLine($"  ApplicationName  : {config.ApplicationName}");
+    Console.WriteLine($"  ApplicationUri   : {config.ApplicationUri}");
+    Console.WriteLine($"  NamespaceUri     : {config.NamespaceUri ?? "(default: ApplicationUri + /nodes)"}");
+    Console.WriteLine($"  ManufacturerName : {config.ManufacturerName ?? "(not set)"}");
+    Console.WriteLine($"  ProductName      : {config.ProductName ?? "(not set)"}");
+    Console.WriteLine($"  SoftwareVersion  : {config.SoftwareVersion ?? "(auto-detect)"}");
+    Console.WriteLine($"  BuildNumber      : {config.BuildNumber ?? "(auto-detect)"}");
     Console.WriteLine();
     Console.WriteLine("  Endpoints:");
-    foreach (var addr in config.BaseAddresses) Console.WriteLine("    " + addr);
+    foreach (var addr in config.BaseAddresses)
+        Console.WriteLine($"    {addr}");
     Console.WriteLine();
-        Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
-    Console.WriteLine("  VendorServerInfo:");
-    Console.WriteLine("    VendorName=" + (config.VendorName ?? "(not set)") +
-                      "  ProductName=" + (config.VendorProductName ?? "(not set)") +
-                      "  Version=" + (config.VendorProductVersion ?? "(not set)"));
+    Console.WriteLine($"  EndpointHostMode : {config.EndpointHostMode}");
     Console.WriteLine();
-    Console.WriteLine("  OperationLimits:");
-    Console.WriteLine("    Read=" + config.MaxNodesPerRead + "  Write=" + config.MaxNodesPerWrite +
-                      "  Browse=" + config.MaxNodesPerBrowse + "  Method=" + config.MaxNodesPerMethodCall);
-    Console.WriteLine("    HistRD=" + config.MaxNodesPerHistoryReadData + "  HistRE=" + config.MaxNodesPerHistoryReadEvents +
-                      "  HistUD=" + config.MaxNodesPerHistoryUpdateData + "  HistUE=" + config.MaxNodesPerHistoryUpdateEvents);
-    Console.WriteLine("    Register=" + config.MaxNodesPerRegisterNodes +
-                      "  Translate=" + config.MaxNodesPerTranslateBrowsePathsToNodeIds +
-                      "  NodeMgmt=" + config.MaxNodesPerNodeManagement +
-                      "  MonItems=" + config.MaxMonitoredItemsPerCall);
-    Console.WriteLine("-------------------------------------------------------------");
+    Console.WriteLine("  Certificate Store:");
+    if (config.CertificateStore != null)
+        Console.WriteLine($"    {config.CertificateStore}");
+    else
+        Console.WriteLine("    (not set)");
+    Console.WriteLine();
+    Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):");
+    Console.WriteLine($"    VendorName           = {config.VendorName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductName    = {config.VendorProductName ?? "(not set)"}");
+    Console.WriteLine($"    VendorProductVersion = {config.VendorProductVersion ?? "(not set)"}");
+    Console.WriteLine();
+    Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):");
+    Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}");
+    Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}");
+    Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}");
+    Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}");
+    Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}");
+    Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}");
+    Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}");
+    Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}");
+    Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}");
+    Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}");
+    Console.WriteLine("─────────────────────────────────────────────────────────────────────────────");
     Console.WriteLine();
 }

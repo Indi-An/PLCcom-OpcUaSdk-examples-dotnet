@@ -19,11 +19,6 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
-Imports PLCcom.Opc.Ua
-Imports PLCcom.Opc.Ua.Server
-Imports PLCcom.Opc.Ua.Server.Sdk
-Imports System
-Imports System.Collections.Generic
 
 ' ==============================================================================
 ' PLCcom OPC UA Server SDK - Workshop 12: User Authentication
@@ -50,6 +45,12 @@ Imports System.Collections.Generic
 ' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
 
+Imports PLCcom.Opc.Ua
+Imports PLCcom.Opc.Ua.Server
+Imports PLCcom.Opc.Ua.Server.Sdk
+Imports System
+Imports System.Collections.Generic
+Imports System.Reflection
 Module Program
 
     Sub Main(args As String())
@@ -103,11 +104,22 @@ Module Program
             Console.WriteLine("  viewer   / viewer123   -> Observer  (read-only)")
             Console.WriteLine()
 
+
+            ' Accept all client certificates automatically.
+            ' WARNING: Do Not use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate And e.Error, then set e.Accept = true Or false),
+            ' Or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler server.CertificateValidation, Sub(s, e)
                                                          Console.WriteLine($"  [CERT] {e.Certificate.Subject} -> Accepted")
                                                          e.Accept = True
                                                      End Sub
 
+            ' Accept all client certificates automatically.
+            ' WARNING: Do Not use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate And e.Error, then set e.Accept = true Or false),
+            ' Or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler server.UserManager.CertificateValidation, Sub(s, e)
                                                                      Console.WriteLine($"  [USER CERT] {e.Certificate.Subject} -> Accepted")
                                                                      e.Accept = True
@@ -212,8 +224,6 @@ Module Program
             New UserTokenPolicy With {.TokenType = UserTokenType.UserName},
             New UserTokenPolicy With {.TokenType = UserTokenType.Certificate}
         }
-        cfg.CertificateStorePath        = ".\pki"
-        cfg.CertificateLifetimeInMonths = 60
         cfg.AutoAcceptUntrustedCertificates = False
         ' AsConfigured (default) = endpoints use exactly the host from BaseAddresses
         ' NormalizeToHostname    = replace localhost/127.0.0.1 with the machine name
@@ -236,17 +246,56 @@ Module Program
         cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
         cfg.MaxNodesPerNodeManagement            = 1000
         cfg.MaxMonitoredItemsPerCall             = 1000
-        Return cfg
+
+        ' -- PKI Certificate Store -----------------------------------------------
+        ' UaServerCertificateStore manages all server certificates.
+        ' Load() tries to load existing certificates from disk.
+        ' GetMissingOrExpired() returns certificates that need to be (re)created.
+        ' Build(overwrite:=True) creates a new self-signed certificate on disk.
+        ''
+        ' One Application certificate is required for the OPC UA secure channel.
+        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        Dim certs As New List(Of UaServerCertificate) From {
+            New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=Assembly.GetEntryAssembly().GetName().Name,
+                applicationUri:=cfg.ApplicationUri,
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Application)
+        }
+
+        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
+            certs.Add(New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=host,
+                applicationUri:=$"urn:{host}:https",
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Https))
+        Next
+
+        Dim store = UaServerCertificateStore.Load(".\pki", certs)
+        For Each missing In store.GetMissingOrExpired()
+            missing.Build(overwrite:=True)
+        Next
+        cfg.SetCertificateStore(store)
+                Return cfg
     End Function
 
     ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+' ==========================================================================
     ' Helper: PrintConfig
     ' ==========================================================================
     Private Sub PrintConfig(config As UaServerConfiguration)
         Console.WriteLine("-- Active Server Configuration ------------------------------")
         Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
         Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
-        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default: ApplicationUri + /nodes)"))
         Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
         Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
         Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
@@ -257,19 +306,33 @@ Module Program
             Console.WriteLine("    " & addr)
         Next
         Console.WriteLine()
-        Console.WriteLine("  Authentication: UserName + Certificate (Anonymous disabled)")
+        Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
         Console.WriteLine()
-                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
+        Console.WriteLine("  Certificate Store:")
+        If config.CertificateStore IsNot Nothing Then
+            Console.WriteLine("    " & config.CertificateStore.ToString())
+        Else
+            Console.WriteLine("    (not set)")
+        End If
+        Console.WriteLine()
         Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):")
         Console.WriteLine("    VendorName           = " & If(config.VendorName, "(not set)"))
         Console.WriteLine("    VendorProductName    = " & If(config.VendorProductName, "(not set)"))
         Console.WriteLine("    VendorProductVersion = " & If(config.VendorProductVersion, "(not set)"))
         Console.WriteLine()
         Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):")
-        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse)
-        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
-        Console.WriteLine("    Method=" & config.MaxNodesPerMethodCall & "  Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds)
-        Console.WriteLine("    NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}")
+        Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}")
+        Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}")
+        Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}")
+        Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}")
+        Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}")
+        Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}")
+        Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}")
         Console.WriteLine("-------------------------------------------------------------")
         Console.WriteLine()
     End Sub

@@ -42,12 +42,13 @@
 ' Connect with any OPC UA client to: opc.tcp://localhost:48410
 ' ==============================================================================
 
+
 Imports PLCcom.Opc.Ua
 Imports PLCcom.Opc.Ua.Server.Sdk
 Imports System
 Imports System.Collections.Generic
+Imports System.Reflection
 Imports System.Threading
-
 Module Program
 
     Sub Main(args As String())
@@ -74,11 +75,16 @@ Module Program
             .ProductUri        = "https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/",
             .BaseAddresses     = New List(Of String) From {"opc.tcp://localhost:48410", "opc.https://localhost:48411"},
             .SecurityPolicies  = UaServer.GetRecommendedSecurityPolicies(),
-            .UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}},
-            .CertificateStorePath = ".\pki"
+            .UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
         }
 
         Using server As New UaServer(LicenseUserName, LicenseSerial)
+
+            ' Accept all client certificates automatically.
+            ' WARNING: Do Not use this in production! Either implement your own validation
+            ' logic here (inspect e.Certificate And e.Error, then set e.Accept = true Or false),
+            ' Or remove this handler entirely -- the SDK will then automatically validate
+            ' certificates against the PKI trust store (pki/trusted/certs/).
             AddHandler server.CertificateValidation, Sub(s, e) e.Accept = True
 
             Console.Write("Starting server ... ")
@@ -94,13 +100,13 @@ Module Program
             Console.WriteLine()
 
             ' -- Address space -----------------------------------------------------
-            Dim plant   = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim plant = server.CreateFolder("Plant", UaRolePermissions.WITHOUT_RESTRICTIONS)
             Dim reactor = server.CreateFolder(plant, "Reactor", UaRolePermissions.WITHOUT_RESTRICTIONS)
             server.EnableEvents(reactor)
 
             ' Process variables
             Dim temperature = server.CreateVariable(Of Double)(reactor, "Temperature", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=25.0)
-            Dim pressure    = server.CreateVariable(Of Double)(reactor, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=1.0)
+            Dim pressure = server.CreateVariable(Of Double)(reactor, "Pressure", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=1.0)
             Dim pumpRunning = server.CreateVariable(Of Boolean)(reactor, "PumpRunning", UaRolePermissions.WITHOUT_RESTRICTIONS, initialValue:=True)
 
             temperature.SetEURange(0, 200)
@@ -145,10 +151,10 @@ Module Program
             Console.WriteLine()
 
             Dim rng As New Random()
-            Dim tempActive   As Boolean = False
-            Dim pressHigh    As Boolean = False
-            Dim pressHH      As Boolean = False
-            Dim pumpActive   As Boolean = False
+            Dim tempActive As Boolean = False
+            Dim pressHigh As Boolean = False
+            Dim pressHH As Boolean = False
+            Dim pumpActive As Boolean = False
             Dim dialogActive As Boolean = False
             Dim tick As Integer = 0
 
@@ -156,12 +162,12 @@ Module Program
                 tick += 1
 
                 ' -- Simulate process values ---------------------------------------
-                Dim t As Double  = 50.0 + Math.Sin(DateTime.UtcNow.Ticks * 0.0000001) * 40.0 + rng.NextDouble() * 5.0
-                Dim p As Double  = 1.0 + (t - 50.0) / 20.0 + rng.NextDouble() * 0.5
+                Dim t As Double = 50.0 + Math.Sin(DateTime.UtcNow.Ticks * 0.0000001) * 40.0 + rng.NextDouble() * 5.0
+                Dim p As Double = 1.0 + (t - 50.0) / 20.0 + rng.NextDouble() * 0.5
                 Dim pump As Boolean = (tick Mod 20 <> 0)
 
                 temperature.Value = Math.Round(t, 1)
-                pressure.Value    = Math.Round(p, 2)
+                pressure.Value = Math.Round(p, 2)
                 pumpRunning.Value = pump
 
                 ' -- AlarmConditionType: temperature high alarm --------------------
@@ -252,8 +258,6 @@ Module Program
         cfg.UserTokenPolicies = New List(Of UserTokenPolicy) From {New UserTokenPolicy With {.TokenType = UserTokenType.Anonymous}}
 
         ' ── PKI Certificate Store ─────────────────────────────────────────────
-        cfg.CertificateStorePath = ".\pki"
-        cfg.CertificateLifetimeInMonths = 60
         cfg.AutoAcceptUntrustedCertificates = False
 
         ' ── Endpoint Host Normalization ───────────────────────────────────────
@@ -282,33 +286,93 @@ Module Program
         cfg.MaxNodesPerTranslateBrowsePathsToNodeIds = 1000
         cfg.MaxNodesPerNodeManagement            = 1000
         cfg.MaxMonitoredItemsPerCall             = 1000
-        Return cfg
+
+        ' -- PKI Certificate Store -----------------------------------------------
+        ' UaServerCertificateStore manages all server certificates.
+        ' Load() tries to load existing certificates from disk.
+        ' GetMissingOrExpired() returns certificates that need to be (re)created.
+        ' Build(overwrite:=True) creates a new self-signed certificate on disk.
+        ''
+        ' One Application certificate is required for the OPC UA secure channel.
+        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        Dim certs As New List(Of UaServerCertificate) From {
+            New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=Assembly.GetEntryAssembly().GetName().Name,
+                applicationUri:=cfg.ApplicationUri,
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Application)
+        }
+
+        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
+            certs.Add(New UaServerCertificate(
+                pkiBase:=".\pki",
+                password:="secretpassword",
+                alias:=host,
+                applicationUri:=$"urn:{host}:https",
+                validityDays:=720,
+                organisation:="Indi.An GmbH",
+                role:=UaServerCertificate.CertificateRole.Https))
+        Next
+
+        Dim store = UaServerCertificateStore.Load(".\pki", certs)
+        For Each missing In store.GetMissingOrExpired()
+            missing.Build(overwrite:=True)
+        Next
+        cfg.SetCertificateStore(store)
+                Return cfg
     End Function
 
     ' ==========================================================================
+    ' Helper: PrintConfig
+    ' ==========================================================================
+' ==========================================================================
     ' Helper: PrintConfig
     ' ==========================================================================
     Private Sub PrintConfig(config As UaServerConfiguration)
         Console.WriteLine("-- Active Server Configuration ------------------------------")
         Console.WriteLine("  ApplicationName  : " & config.ApplicationName)
         Console.WriteLine("  ApplicationUri   : " & config.ApplicationUri)
-        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default)"))
+        Console.WriteLine("  NamespaceUri     : " & If(config.NamespaceUri, "(default: ApplicationUri + /nodes)"))
         Console.WriteLine("  ManufacturerName : " & If(config.ManufacturerName, "(not set)"))
         Console.WriteLine("  ProductName      : " & If(config.ProductName, "(not set)"))
         Console.WriteLine("  SoftwareVersion  : " & If(config.SoftwareVersion, "(auto-detect)"))
         Console.WriteLine("  BuildNumber      : " & If(config.BuildNumber, "(auto-detect)"))
         Console.WriteLine()
         Console.WriteLine("  Endpoints:")
-        For Each addr In config.BaseAddresses : Console.WriteLine("    " & addr) : Next
+        For Each addr In config.BaseAddresses
+            Console.WriteLine("    " & addr)
+        Next
         Console.WriteLine()
-                Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
-        Console.WriteLine("  VendorServerInfo:")
-        Console.WriteLine("    VendorName=" & If(config.VendorName, "(not set)") & "  ProductName=" & If(config.VendorProductName, "(not set)") & "  Version=" & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine("  EndpointHostMode : " & config.EndpointHostMode.ToString())
         Console.WriteLine()
-        Console.WriteLine("  OperationLimits:")
-        Console.WriteLine("    Read=" & config.MaxNodesPerRead & "  Write=" & config.MaxNodesPerWrite & "  Browse=" & config.MaxNodesPerBrowse & "  Method=" & config.MaxNodesPerMethodCall)
-        Console.WriteLine("    HistRD=" & config.MaxNodesPerHistoryReadData & "  HistRE=" & config.MaxNodesPerHistoryReadEvents & "  HistUD=" & config.MaxNodesPerHistoryUpdateData & "  HistUE=" & config.MaxNodesPerHistoryUpdateEvents)
-        Console.WriteLine("    Register=" & config.MaxNodesPerRegisterNodes & "  Translate=" & config.MaxNodesPerTranslateBrowsePathsToNodeIds & "  NodeMgmt=" & config.MaxNodesPerNodeManagement & "  MonItems=" & config.MaxMonitoredItemsPerCall)
+        Console.WriteLine("  Certificate Store:")
+        If config.CertificateStore IsNot Nothing Then
+            Console.WriteLine("    " & config.CertificateStore.ToString())
+        Else
+            Console.WriteLine("    (not set)")
+        End If
+        Console.WriteLine()
+        Console.WriteLine("  VendorServerInfo (Server/VendorServerInfo):")
+        Console.WriteLine("    VendorName           = " & If(config.VendorName, "(not set)"))
+        Console.WriteLine("    VendorProductName    = " & If(config.VendorProductName, "(not set)"))
+        Console.WriteLine("    VendorProductVersion = " & If(config.VendorProductVersion, "(not set)"))
+        Console.WriteLine()
+        Console.WriteLine("  OperationLimits (Server/ServerCapabilities/OperationLimits):")
+        Console.WriteLine($"    MaxNodesPerRead                          = {config.MaxNodesPerRead}")
+        Console.WriteLine($"    MaxNodesPerWrite                         = {config.MaxNodesPerWrite}")
+        Console.WriteLine($"    MaxNodesPerBrowse                        = {config.MaxNodesPerBrowse}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadData               = {config.MaxNodesPerHistoryReadData}")
+        Console.WriteLine($"    MaxNodesPerHistoryReadEvents             = {config.MaxNodesPerHistoryReadEvents}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateData             = {config.MaxNodesPerHistoryUpdateData}")
+        Console.WriteLine($"    MaxNodesPerHistoryUpdateEvents           = {config.MaxNodesPerHistoryUpdateEvents}")
+        Console.WriteLine($"    MaxNodesPerMethodCall                    = {config.MaxNodesPerMethodCall}")
+        Console.WriteLine($"    MaxNodesPerRegisterNodes                 = {config.MaxNodesPerRegisterNodes}")
+        Console.WriteLine($"    MaxNodesPerTranslateBrowsePathsToNodeIds = {config.MaxNodesPerTranslateBrowsePathsToNodeIds}")
+        Console.WriteLine($"    MaxNodesPerNodeManagement                = {config.MaxNodesPerNodeManagement}")
+        Console.WriteLine($"    MaxMonitoredItemsPerCall                 = {config.MaxMonitoredItemsPerCall}")
         Console.WriteLine("-------------------------------------------------------------")
         Console.WriteLine()
     End Sub
