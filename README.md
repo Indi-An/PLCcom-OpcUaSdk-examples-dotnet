@@ -2,7 +2,7 @@
 
 <img src="https://www.indi-an.com//wp-content/uploads/2026/03/PLCcom_720.png" width="200" alt="PLCcom Logo">
 
-This repository provides quick-start examples for developers using the **PLCcom.Opc.Ua.Sdk** library. These examples demonstrate how easy it is to integrate PLCcom into your .NET applications, enabling seamless communication with OPC UA servers — and how to build your own OPC UA servers.
+This repository provides quick-start examples for developers using the **PLCcom.Opc.Ua.Sdk** library and the **PLCcom.Opc.Ua.PubSub** add-on. These examples demonstrate how easy it is to integrate PLCcom into your .NET applications, enabling seamless communication with OPC UA servers — and how to build your own OPC UA servers and PubSub publishers/subscribers.
 
 ## Easy to Use — Address Nodes by Path or NodeId
 
@@ -46,6 +46,7 @@ PLCcom.Opc.Ua.Sdk is a highly optimized and modern SDK designed specifically for
 - Automatic Connect, Reconnect, and Disconnect functionality
 - Active keep-alive monitoring of the server state
 - Full **Client SDK** and **Server SDK** in a single assembly
+- **OPC UA PubSub** add-on — brokerless UDP/UADP and broker-based MQTT/UADP and MQTT/JSON transport (separate NuGet package)
 - Support for **opc.tcp** and **opc.https** transport protocols
 - Support for the most common OPC UA specifications:
   - Data Access (most used)
@@ -61,6 +62,31 @@ For a full list of supported features and detailed descriptions, refer to the of
 ---
 
 ## Workshop Overview
+
+### PubSub Workshops (C# and Visual Basic)
+
+The PubSub workshops require the **PLCcom.Opc.Ua.PubSub** add-on package:
+```bash
+Install-Package PLCcom.Opc.Ua.PubSub
+```
+
+| # | Workshop | Description |
+|---|----------|-------------|
+| **1 Brokerless UADP** | | |
+| 11 | UADP Unicast Publisher | Publish directly to a single subscriber via UDP unicast |
+| 12 | UADP Unicast Subscriber | Receive unicast messages with dynamic field discovery |
+| 13 | UADP Multicast Publisher | Publish to a multicast group — no broker required |
+| 14 | UADP Multicast Subscriber | Join a multicast group and receive published data |
+| **2 Broker UADP** | | |
+| 21 | MQTT UADP Publisher | Publish via MQTT broker with compact UADP binary encoding |
+| 22 | MQTT UADP Subscriber | Receive UADP messages from an MQTT broker |
+| 23 | sMQTT UADP Publisher | Publish via MQTT broker with TLS encryption |
+| 24 | sMQTT UADP Subscriber | Receive UADP messages over a TLS-secured MQTT connection |
+| **3 Broker JSON** | | |
+| 31 | MQTT JSON Publisher | Publish via MQTT broker with human-readable JSON encoding |
+| 32 | MQTT JSON Subscriber | Receive JSON messages from an MQTT broker |
+| 33 | sMQTT JSON Publisher | Publish JSON via MQTT broker with TLS encryption |
+| 34 | sMQTT JSON Subscriber | Receive JSON messages over a TLS-secured MQTT connection |
 
 ### Client Workshops (C# and Visual Basic)
 
@@ -162,16 +188,24 @@ Many client workshops are designed to work with a specific server workshop. Star
 
 - .NET 10.0
 - Visual Studio 2022 or newer (recommended VS2026)
+- [PLCcom.Opc.Ua.Sdk](https://www.nuget.org/packages/PLCcom.Opc.Ua.Sdk) 10.5.* or newer
+- [PLCcom.Opc.Ua.PubSub](https://www.nuget.org/packages/PLCcom.Opc.Ua.PubSub) 10.5.* or newer (PubSub workshops only)
 
 ---
 
 ## Getting Started
 
 1. Clone this repository.
-2. Install the PLCcom.Opc.Ua.Sdk NuGet package into your project from the NuGet Package Manager:
+2. Install the PLCcom.Opc.Ua.Sdk NuGet package:
 
 ```bash
 Install-Package PLCcom.Opc.Ua.Sdk
+```
+
+3. For PubSub workshops, also install the add-on package:
+
+```bash
+Install-Package PLCcom.Opc.Ua.PubSub
 ```
 
 ---
