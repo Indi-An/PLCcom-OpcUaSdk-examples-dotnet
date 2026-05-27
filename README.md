@@ -63,31 +63,6 @@ For a full list of supported features and detailed descriptions, refer to the of
 
 ## Workshop Overview
 
-### PubSub Workshops (C# and Visual Basic)
-
-The PubSub workshops require the **PLCcom.Opc.Ua.PubSub** add-on package:
-```bash
-Install-Package PLCcom.Opc.Ua.PubSub
-```
-
-| # | Workshop | Description |
-|---|----------|-------------|
-| **1 Brokerless UADP** | | |
-| 11 | UADP Unicast Publisher | Publish directly to a single subscriber via UDP unicast |
-| 12 | UADP Unicast Subscriber | Receive unicast messages with dynamic field discovery |
-| 13 | UADP Multicast Publisher | Publish to a multicast group — no broker required |
-| 14 | UADP Multicast Subscriber | Join a multicast group and receive published data |
-| **2 Broker UADP** | | |
-| 21 | MQTT UADP Publisher | Publish via MQTT broker with compact UADP binary encoding |
-| 22 | MQTT UADP Subscriber | Receive UADP messages from an MQTT broker |
-| 23 | sMQTT UADP Publisher | Publish via MQTT broker with TLS encryption |
-| 24 | sMQTT UADP Subscriber | Receive UADP messages over a TLS-secured MQTT connection |
-| **3 Broker JSON** | | |
-| 31 | MQTT JSON Publisher | Publish via MQTT broker with human-readable JSON encoding |
-| 32 | MQTT JSON Subscriber | Receive JSON messages from an MQTT broker |
-| 33 | sMQTT JSON Publisher | Publish JSON via MQTT broker with TLS encryption |
-| 34 | sMQTT JSON Subscriber | Receive JSON messages over a TLS-secured MQTT connection |
-
 ### Client Workshops (C# and Visual Basic)
 
 | # | Workshop | Description |
@@ -155,6 +130,31 @@ Install-Package PLCcom.Opc.Ua.PubSub
 | **7 Reverse Connect** | | |
 | 71 | Reverse Connect | Server-initiated connections through firewalls |
 
+### PubSub Workshops (C# and Visual Basic)
+
+The PubSub workshops require the **PLCcom.Opc.Ua.PubSub** add-on package:
+```bash
+Install-Package PLCcom.Opc.Ua.PubSub
+```
+
+| # | Workshop | Description |
+|---|----------|-------------|
+| **1 Brokerless UADP** | | |
+| 11 | UADP Unicast Publisher | Publish directly to a single subscriber via UDP unicast |
+| 12 | UADP Unicast Subscriber | Receive unicast messages with dynamic field discovery |
+| 13 | UADP Multicast Publisher | Publish to a multicast group — no broker required |
+| 14 | UADP Multicast Subscriber | Join a multicast group and receive published data |
+| **2 Broker UADP** | | |
+| 21 | MQTT UADP Publisher | Publish via MQTT broker with compact UADP binary encoding |
+| 22 | MQTT UADP Subscriber | Receive UADP messages from an MQTT broker |
+| 23 | sMQTT UADP Publisher | Publish via MQTT broker with TLS encryption |
+| 24 | sMQTT UADP Subscriber | Receive UADP messages over a TLS-secured MQTT connection |
+| **3 Broker JSON** | | |
+| 31 | MQTT JSON Publisher | Publish via MQTT broker with human-readable JSON encoding |
+| 32 | MQTT JSON Subscriber | Receive JSON messages from an MQTT broker |
+| 33 | sMQTT JSON Publisher | Publish JSON via MQTT broker with TLS encryption |
+| 34 | sMQTT JSON Subscriber | Receive JSON messages over a TLS-secured MQTT connection |
+
 ### Client ↔ Server Pairing
 
 Many client workshops are designed to work with a specific server workshop. Start the server first, then run the matching client:
@@ -181,6 +181,19 @@ Many client workshops are designed to work with a specific server workshop. Star
 | 51 Complex Types | 15 Custom Types | Structured data types |
 | 61 Simple Events | 61 Simple Events | Events |
 | 71 Reverse Connect | 71 Reverse Connect | Firewall traversal |
+
+### Publisher ↔ Subscriber Pairing
+
+Each publisher workshop has a matching subscriber. Run the publisher first, then the subscriber:
+
+| Publisher | Subscriber | Transport |
+|-----------|------------|-----------|
+| 11 UADP Unicast Publisher | 12 UADP Unicast Subscriber | UDP unicast (brokerless) |
+| 13 UADP Multicast Publisher | 14 UADP Multicast Subscriber | UDP multicast (brokerless) |
+| 21 MQTT UADP Publisher | 22 MQTT UADP Subscriber | MQTT broker, UADP encoding |
+| 23 sMQTT UADP Publisher | 24 sMQTT UADP Subscriber | MQTT broker, UADP encoding, TLS |
+| 31 MQTT JSON Publisher | 32 MQTT JSON Subscriber | MQTT broker, JSON encoding |
+| 33 sMQTT JSON Publisher | 34 sMQTT JSON Subscriber | MQTT broker, JSON encoding, TLS |
 
 ---
 
