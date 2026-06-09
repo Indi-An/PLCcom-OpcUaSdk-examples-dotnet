@@ -144,6 +144,8 @@ Install-Package PLCcom.Opc.Ua.PubSub
 | 12 | UADP Unicast Subscriber | Receive unicast messages with dynamic field discovery |
 | 13 | UADP Multicast Publisher | Publish to a multicast group — no broker required |
 | 14 | UADP Multicast Subscriber | Join a multicast group and receive published data |
+| 15 | UADP Broadcast Publisher | Publish UADP messages to the local broadcast address |
+| 16 | UADP Broadcast Subscriber | Receive broadcast UADP messages without discovery |
 | **2 Broker UADP** | | |
 | 21 | MQTT UADP Publisher | Publish via MQTT broker with compact UADP binary encoding |
 | 22 | MQTT UADP Subscriber | Receive UADP messages from an MQTT broker |
@@ -190,6 +192,7 @@ Each publisher workshop has a matching subscriber. Run the publisher first, then
 |-----------|------------|-----------|
 | 11 UADP Unicast Publisher | 12 UADP Unicast Subscriber | UDP unicast (brokerless) |
 | 13 UADP Multicast Publisher | 14 UADP Multicast Subscriber | UDP multicast (brokerless) |
+| 15 UADP Broadcast Publisher | 16 UADP Broadcast Subscriber | UDP broadcast (brokerless) |
 | 21 MQTT UADP Publisher | 22 MQTT UADP Subscriber | MQTT broker, UADP encoding |
 | 23 sMQTT UADP Publisher | 24 sMQTT UADP Subscriber | MQTT broker, UADP encoding, TLS |
 | 31 MQTT JSON Publisher | 32 MQTT JSON Subscriber | MQTT broker, JSON encoding |
