@@ -220,7 +220,7 @@ Module Program
         ' Build(overwrite:=True) creates a new self-signed certificate on disk.
         ''
         ' One Application certificate is required for the OPC UA secure channel.
-        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        ' One default HTTPS certificate is presented at every opc.https TLS handshake.
         Dim certs As New List(Of UaServerCertificate) From {
             New UaServerCertificate(
                 pkiBase:=".\pki",
@@ -232,21 +232,26 @@ Module Program
                 role:=UaServerCertificate.CertificateRole.Application)
         }
 
-        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
-            certs.Add(New UaServerCertificate(
-                pkiBase:=".\pki",
-                password:="secretpassword",
-                alias:=host,
-                applicationUri:=$"urn:{host}:https",
-                validityDays:=720,
-                organisation:="Indi.An GmbH",
-                role:=UaServerCertificate.CertificateRole.Https))
-        Next
+        ' One default HTTPS certificate for all opc.https ports. The SDK presents it at the
+        ' TLS handshake for any opc.https port that has no specifically assigned certificate.
+        ' To serve an official domain certificate on a port, create another HTTPS certificate
+        ' and assign it: cfg.AssignHttpsCertificateToPort(port, cert).
+        Dim httpsDefault As New UaServerCertificate(
+            pkiBase:=".\pki",
+            password:="secretpassword",
+            alias:="https-default",
+            applicationUri:="urn:https-default:https",
+            validityDays:=720,
+            organisation:="Indi.An GmbH",
+            role:=UaServerCertificate.CertificateRole.Https)
+        certs.Add(httpsDefault)
+        cfg.SetDefaultHttpsCertificate(httpsDefault)
 
         Dim store = UaServerCertificateStore.Load(".\pki", certs)
         For Each missing In store.GetMissingOrExpired()
             missing.Build(overwrite:=True)
         Next
+
         cfg.SetCertificateStore(store)
                 Return cfg
     End Function

@@ -81,8 +81,8 @@ using System.Threading;
 
 // -- License -------------------------------------------------------------------
 // TODO: Replace with your license credentials from your license e-mail
-string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial = "<Enter your Serial here>";
+string LicenseUserName = "test";
+string LicenseSerial = "58399-5649222-109248-2468274";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 19: Advanced Server     ║");
@@ -513,10 +513,10 @@ static UaServerConfiguration CreateConfig()
     };
 
     // -- PKI Certificate Store ------------------------------------------------
-    // UaServerCertificateStore verwaltet alle Server-Zertifikate.
-    // Load() versucht vorhandene Zertifikate von Disk zu laden.
-    // GetMissingOrExpired() liefert alle fehlenden oder abgelaufenen Zertifikate.
-    // Build(true) erstellt ein neues selbstsigniertes Zertifikat.
+    // UaServerCertificateStore manages all server certificates.
+    // Load() tries to load existing certificates from disk.
+    // GetMissingOrExpired() returns all missing or expired certificates.
+    // Build(true) creates a new self-signed certificate.
     var certs = new List<UaServerCertificate>
     {
         new UaServerCertificate(
@@ -529,20 +529,32 @@ static UaServerConfiguration CreateConfig()
             role:           UaServerCertificate.CertificateRole.Application)
     };
 
-    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
-        certs.Add(new UaServerCertificate(
-            pkiBase:        @".\pki",
-            password:       "secretpassword",
-            alias:          host,
-            applicationUri: $"urn:{host}:https",
-            validityDays:   720,
-            organisation:   "Indi.An GmbH",
-            role:           UaServerCertificate.CertificateRole.Https));
+    // One default HTTPS/TLS certificate (SubjectAltName auto-generated: localhost + machine + IPs).
+    // This is also where you would plug in an officially issued certificate instead.
+    var httpsDefault = new UaServerCertificate(
+        pkiBase:        @".\pki",
+        password:       "secretpassword",
+        alias:          "https-default",
+        applicationUri: "urn:https-default:https",
+        validityDays:   720,
+        organisation:   "Indi.An GmbH",
+        role:           UaServerCertificate.CertificateRole.Https);
+    certs.Add(httpsDefault);
+    // Present this certificate on every opc.https port. To force a different certificate on a
+    // specific port — e.g. an externally port-forwarded port that must present an official domain
+    // certificate — use: config.AssignHttpsCertificateToPort(48443, officialCert);
+    config.SetDefaultHttpsCertificate(httpsDefault);
 
-    var store = UaServerCertificateStore.Load(@".\pki", certs);
-    foreach (var missing in store.GetMissingOrExpired())
-        missing.Build(overwrite: true);
-    config.SetCertificateStore(store);
+    // Make every certificate ready *in place* (load existing or build a new one) so the object
+    // identity is preserved.
+    foreach (var cert in certs)
+    {
+        cert.LoadWithResultInPlace();
+        if (!cert.IsReady || !cert.CheckValidity())
+            cert.Build(overwrite: true);
+    }
+
+    config.SetCertificateStore(UaServerCertificateStore.Load(@".\pki", certs));
 
     return config;
 }

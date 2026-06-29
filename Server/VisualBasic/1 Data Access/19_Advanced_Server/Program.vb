@@ -446,7 +446,7 @@ Module Program
         ' Build(overwrite:=True) creates a new self-signed certificate on disk.
         ''
         ' One Application certificate is required for the OPC UA secure channel.
-        ' One HTTPS certificate is added per opc.https:// hostname automatically.
+        ' One default HTTPS certificate is presented at every opc.https TLS handshake.
         Dim certs As New List(Of UaServerCertificate) From {
             New UaServerCertificate(
                 pkiBase:=".\pki",
@@ -458,16 +458,21 @@ Module Program
                 role:=UaServerCertificate.CertificateRole.Application)
         }
 
-        For Each host In UaServerCertificateStore.ExtractHttpsHostnames(cfg.BaseAddresses)
-            certs.Add(New UaServerCertificate(
-                pkiBase:=".\pki",
-                password:="secretpassword",
-                alias:=host,
-                applicationUri:=$"urn:{host}:https",
-                validityDays:=720,
-                organisation:="Indi.An GmbH",
-                role:=UaServerCertificate.CertificateRole.Https))
-        Next
+        ' One default HTTPS/TLS certificate (SubjectAltName auto-generated: localhost + machine + IPs).
+        ' This is also where you would plug in an officially issued certificate instead.
+        Dim httpsDefault As New UaServerCertificate(
+            pkiBase:=".\pki",
+            password:="secretpassword",
+            alias:="https-default",
+            applicationUri:="urn:https-default:https",
+            validityDays:=720,
+            organisation:="Indi.An GmbH",
+            role:=UaServerCertificate.CertificateRole.Https)
+        certs.Add(httpsDefault)
+        ' Present this certificate on every opc.https port. To force a different certificate on a
+        ' specific port - e.g. an externally port-forwarded port that must present an official
+        ' domain certificate - use: cfg.AssignHttpsCertificateToPort(48443, officialCert)
+        cfg.SetDefaultHttpsCertificate(httpsDefault)
 
         Dim store = UaServerCertificateStore.Load(".\pki", certs)
         For Each missing In store.GetMissingOrExpired()

@@ -254,7 +254,7 @@ static UaServerConfiguration CreateConfig()
     // Build(overwrite: true) creates a new self-signed certificate on disk.
     //
     // One Application certificate is required for the OPC UA secure channel.
-    // One HTTPS certificate is added per opc.https:// hostname automatically.
+    // One default HTTPS certificate is presented at every opc.https TLS handshake.
     var certs = new List<UaServerCertificate>
     {
         new UaServerCertificate(
@@ -267,19 +267,25 @@ static UaServerConfiguration CreateConfig()
             role:           UaServerCertificate.CertificateRole.Application)
     };
 
-    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
-        certs.Add(new UaServerCertificate(
-            pkiBase:        @".\pki",
-            password:       "secretpassword",
-            alias:          host,
-            applicationUri: $"urn:{host}:https",
-            validityDays:   720,
-            organisation:   "Indi.An GmbH",
-            role:           UaServerCertificate.CertificateRole.Https));
+    // One default HTTPS certificate for all opc.https ports. The SDK presents it at the
+    // TLS handshake for any opc.https port that has no specifically assigned certificate.
+    // To serve an official domain certificate on a port, create another HTTPS certificate
+    // and assign it: config.AssignHttpsCertificateToPort(port, cert).
+    var httpsDefault = new UaServerCertificate(
+        pkiBase:        @".\pki",
+        password:       "secretpassword",
+        alias:          "https-default",
+        applicationUri: "urn:https-default:https",
+        validityDays:   720,
+        organisation:   "Indi.An GmbH",
+        role:           UaServerCertificate.CertificateRole.Https);
+    certs.Add(httpsDefault);
+    config.SetDefaultHttpsCertificate(httpsDefault);
 
     var store = UaServerCertificateStore.Load(@".\pki", certs);
     foreach (var missing in store.GetMissingOrExpired())
         missing.Build(overwrite: true);
+
     config.SetCertificateStore(store);
 
     return config;

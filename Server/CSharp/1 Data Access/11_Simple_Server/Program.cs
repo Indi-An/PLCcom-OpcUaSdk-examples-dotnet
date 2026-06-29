@@ -393,9 +393,8 @@ static UaServerConfiguration CreateConfig()
     };
 
     // ── PKI Certificate Store ─────────────────────────────────────────────────
-    // Build the certificate store: one Application cert for the OPC UA secure
-    // channel, plus one HTTPS cert per opc.https:// hostname derived from the
-    // base addresses.
+    // Build the certificate store: one Application cert for the OPC UA secure channel,
+    // plus one default HTTPS certificate presented at every opc.https TLS handshake.
     //
     // UaServerCertificateStore.Load() tries to load all certs from disk.
     // Certificates that are missing or cannot be read remain in the store
@@ -420,18 +419,20 @@ static UaServerConfiguration CreateConfig()
             role:           UaServerCertificate.CertificateRole.Application)
     };
 
-    // Add one HTTPS certificate per opc.https:// hostname.
-    // ExtractHttpsHostnames() parses the base addresses and returns
-    // the unique hostnames — e.g. ["localhost"] for "opc.https://localhost:48411".
-    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
-        certs.Add(new UaServerCertificate(
-            pkiBase:        @".\pki",
-            password:       "secretpassword",
-            alias:          host,
-            applicationUri: $"urn:{host}:https",
-            validityDays:   720,
-            organisation:   "Indi.An GmbH",
-            role:           UaServerCertificate.CertificateRole.Https));
+    // One default HTTPS certificate for all opc.https ports. The SDK presents it at the
+    // TLS handshake for any opc.https port that has no specifically assigned certificate.
+    // To serve an official domain certificate on a port, create another HTTPS certificate
+    // and assign it: config.AssignHttpsCertificateToPort(port, cert).
+    var httpsDefault = new UaServerCertificate(
+        pkiBase:        @".\pki",
+        password:       "secretpassword",
+        alias:          "https-default",
+        applicationUri: "urn:https-default:https",
+        validityDays:   720,
+        organisation:   "Indi.An GmbH",
+        role:           UaServerCertificate.CertificateRole.Https);
+    certs.Add(httpsDefault);
+    config.SetDefaultHttpsCertificate(httpsDefault);
 
     var store = UaServerCertificateStore.Load(@".\pki", certs);
 
@@ -441,6 +442,7 @@ static UaServerConfiguration CreateConfig()
     // Hand the fully populated store to the configuration.
     // UaServer.Start() will use it to set up the secure channel and
     // the PKI directory structure (trusted/, rejected/, issuers/).
+
     config.SetCertificateStore(store);
 
     return config;

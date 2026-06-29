@@ -227,10 +227,10 @@ static UaServerConfiguration CreateConfig()
     };
 
     // -- PKI Certificate Store ------------------------------------------------
-    // UaServerCertificateStore verwaltet alle Server-Zertifikate.
-    // Load() versucht vorhandene Zertifikate von Disk zu laden.
-    // GetMissingOrExpired() liefert alle fehlenden oder abgelaufenen Zertifikate.
-    // Build(true) erstellt ein neues selbstsigniertes Zertifikat.
+    // UaServerCertificateStore manages all server certificates.
+    // Load() tries to load existing certificates from disk.
+    // GetMissingOrExpired() returns all missing or expired certificates.
+    // Build(true) creates a new self-signed certificate.
     var certs = new List<UaServerCertificate>
     {
         new UaServerCertificate(
@@ -243,19 +243,25 @@ static UaServerConfiguration CreateConfig()
             role:           UaServerCertificate.CertificateRole.Application)
     };
 
-    foreach (var host in UaServerCertificateStore.ExtractHttpsHostnames(config.BaseAddresses))
-        certs.Add(new UaServerCertificate(
-            pkiBase:        @".\pki",
-            password:       "secretpassword",
-            alias:          host,
-            applicationUri: $"urn:{host}:https",
-            validityDays:   720,
-            organisation:   "Indi.An GmbH",
-            role:           UaServerCertificate.CertificateRole.Https));
+    // One default HTTPS certificate for all opc.https ports. The SDK presents it at the
+    // TLS handshake for any opc.https port that has no specifically assigned certificate.
+    // To serve an official domain certificate on a port, create another HTTPS certificate
+    // and assign it: config.AssignHttpsCertificateToPort(port, cert).
+    var httpsDefault = new UaServerCertificate(
+        pkiBase:        @".\pki",
+        password:       "secretpassword",
+        alias:          "https-default",
+        applicationUri: "urn:https-default:https",
+        validityDays:   720,
+        organisation:   "Indi.An GmbH",
+        role:           UaServerCertificate.CertificateRole.Https);
+    certs.Add(httpsDefault);
+    config.SetDefaultHttpsCertificate(httpsDefault);
 
     var store = UaServerCertificateStore.Load(@".\pki", certs);
     foreach (var missing in store.GetMissingOrExpired())
         missing.Build(overwrite: true);
+
     config.SetCertificateStore(store);
 
     return config;
