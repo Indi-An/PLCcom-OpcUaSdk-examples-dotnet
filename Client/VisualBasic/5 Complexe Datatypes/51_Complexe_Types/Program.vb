@@ -41,6 +41,7 @@
 '   * How to read and decode struct variables (ExtensionObject)
 '   * How to write individual struct fields via child node paths
 '   * How to read arrays of structs
+'   * How to dispose the client properly (internal reconnects keep the loaded type system)
 '
 ' Required server: Server Workshop 15 (Custom Types)
 ' opc.tcp://localhost:48410
@@ -124,7 +125,18 @@ Public Class Program
             Console.WriteLine("Info: license state => " & client.GetLicenceMessage())
 
             AddHandler client.ServerConnectionLost, Sub(s, e) Console.WriteLine(DateTime.Now.ToLocalTime() & " Session connection lost")
-            AddHandler client.ServerConnected, Sub(s, e) Console.WriteLine(DateTime.Now.ToLocalTime() & " Session connected")
+            AddHandler client.ServerConnected,
+                Sub(s, e)
+                    Console.WriteLine(DateTime.Now.ToLocalTime() & " Session connected")
+
+                    ' No type dictionary reload is needed here. On an internal auto-reconnect to
+                    ' the same, unchanged server the SDK re-registers the already loaded complex
+                    ' type system for the new session automatically, so decoded structs keep
+                    ' working. Reload the type system yourself only if the server's type
+                    ' configuration actually changed, via:
+                    '     client.ReleaseComplexTypeSystem()       ' drop the cached type system
+                    '     client.GetComplexTypeSystem().Load()    ' download and register it again
+                End Sub
             AddHandler client.SessionClosing, Sub(s, e) Console.WriteLine(DateTime.Now.ToLocalTime() & " Session closed")
             AddHandler client.CertificateValidation, AddressOf CertificateValidationHandler
 
@@ -191,9 +203,11 @@ Public Class Program
         Finally
             Console.WriteLine("press enter for exit")
             Console.ReadLine()
-            If client IsNot Nothing AndAlso client.GetSessionState().Equals(SessionState.Connected) Then
-                client.Disconnect()
-            End If
+
+            ' Dispose the client instead of only disconnecting: Dispose disconnects
+            ' if still needed, stops the auto-reconnect loop and releases all client
+            ' resources. Always dispose the client, not just Disconnect().
+            If client IsNot Nothing Then client.Dispose()
         End Try
     End Sub
 
