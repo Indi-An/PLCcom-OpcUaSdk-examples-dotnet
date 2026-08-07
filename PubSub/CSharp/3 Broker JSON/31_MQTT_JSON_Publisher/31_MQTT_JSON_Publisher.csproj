@@ -6,7 +6,7 @@
     <Company>Indi.An GmbH</Company>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.PubSub" Version="10.6.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.PubSub" Version="10.7.*" />
   </ItemGroup>
 </Project>
 

@@ -104,7 +104,7 @@ Module Program
 
                 ' Subscribe to CertificateValidation to handle broker certificate trust.
                 ' This handler accepts any certificate - suitable for testing only.
-                ' For production, copy the CA certificate to ./pki/issuers/certs/ instead.
+                ' For production, copy the CA certificate to ./pki/issuer/certs/ instead.
                 AddHandler publisher.CertificateValidation, Sub(sender, e)
                                                                 Console.WriteLine($"  [TLS] Broker certificate: {e.Certificate.Subject}")
                                                                 Console.WriteLine($"  [TLS] Issuer:             {e.Certificate.Issuer}")

@@ -204,8 +204,8 @@ Each publisher workshop has a matching subscriber. Run the publisher first, then
 
 - .NET 10.0
 - Visual Studio 2022 or newer (recommended VS2026)
-- [PLCcom.Opc.Ua.Sdk](https://www.nuget.org/packages/PLCcom.Opc.Ua.Sdk) 10.5.* or newer
-- [PLCcom.Opc.Ua.PubSub](https://www.nuget.org/packages/PLCcom.Opc.Ua.PubSub) 10.5.* or newer (PubSub workshops only)
+- [PLCcom.Opc.Ua.Sdk](https://www.nuget.org/packages/PLCcom.Opc.Ua.Sdk) 10.7.* or newer
+- [PLCcom.Opc.Ua.PubSub](https://www.nuget.org/packages/PLCcom.Opc.Ua.PubSub) 10.7.* or newer (PubSub workshops only)
 
 ---
 

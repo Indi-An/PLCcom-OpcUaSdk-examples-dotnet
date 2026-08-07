@@ -37,16 +37,21 @@
 //
 //     ./pki/trusted/certs/   - directly trusted broker certificates
 //     ./pki/trusted/crl/     - certificate revocation lists
-//     ./pki/issuers/certs/   - trusted CA/issuer certificates
-//     ./pki/issuers/crl/     - issuer revocation lists
-//     ./pki/rejected/        - certificates rejected on first contact
+//     ./pki/issuer/certs/    - trusted CA/issuer certificates
+//     ./pki/issuer/crl/      - issuer revocation lists
+//     ./pki/rejected/        - refused certificates (no trust anchor, or not time-valid); review, then move to trusted/certs/
 //
 //   FIRST RUN:
-//     On the first connection attempt, the broker's certificate is placed
-//     in ./pki/rejected/ and the connection is refused. You have two options:
+//     The broker certificate is accepted when it lies in ./pki/trusted/certs/, or
+//     when a CA of its chain lies in ./pki/trusted/certs/ or ./pki/issuer/certs/,
+//     and every certificate of that chain is time-valid. Anything refused - no
+//     trust anchor, or expired / not yet valid - is copied to ./pki/rejected/ and
+//     the connection fails; review it there and move the certificate to
+//     ./pki/trusted/certs/ (or its CA to ./pki/issuer/certs/) to trust it.
+//     On a fresh PKI you have two options:
 //
 //     Option A - Copy the CA certificate (recommended for production):
-//       Copy C:\APL\mqtt\certs\ca.crt to ./pki/issuers/certs/
+//       Copy C:\APL\mqtt\certs\ca.crt to ./pki/issuer/certs/
 //       All certificates signed by this CA will then be trusted automatically.
 //
 //     Option B - Accept via CertificateValidation event (for testing):
@@ -132,7 +137,7 @@ class Program
 
             // Subscribe to CertificateValidation to handle broker certificate trust.
             // This handler accepts any certificate - suitable for testing only.
-            // For production, copy the CA certificate to ./pki/issuers/certs/ instead.
+            // For production, copy the CA certificate to ./pki/issuer/certs/ instead.
             publisher.CertificateValidation += (sender, e) =>
             {
                 Console.WriteLine($"  [TLS] Broker certificate: {e.Certificate.Subject}");

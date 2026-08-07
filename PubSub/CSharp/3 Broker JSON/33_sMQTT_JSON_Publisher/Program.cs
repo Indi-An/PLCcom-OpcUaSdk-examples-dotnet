@@ -48,8 +48,8 @@
 //   Same as Workshop 23. See that workshop for full PKI setup instructions.
 //
 //     ./pki/trusted/certs/   - directly trusted broker certificates
-//     ./pki/issuers/certs/   - trusted CA/issuer certificates (copy ca.crt here)
-//     ./pki/rejected/        - certificates rejected on first contact
+//     ./pki/issuer/certs/    - trusted CA/issuer certificates (copy ca.crt here)
+//     ./pki/rejected/        - refused certificates (no trust anchor, or not time-valid); review, then move to trusted/certs/
 //
 // BROKER SETUP:
 //   Same as Workshop 23 - see that workshop for full Mosquitto TLS setup.
@@ -116,7 +116,7 @@ class Program
 
             // Subscribe to CertificateValidation to handle broker certificate trust.
             // This handler accepts any certificate - suitable for testing only.
-            // For production, copy the CA certificate to ./pki/issuers/certs/ instead.
+            // For production, copy the CA certificate to ./pki/issuer/certs/ instead.
             publisher.CertificateValidation += (sender, e) =>
             {
                 Console.WriteLine($"  [TLS] Broker certificate: {e.Certificate.Subject}");

@@ -441,7 +441,7 @@ static UaServerConfiguration CreateConfig()
 
     // Hand the fully populated store to the configuration.
     // UaServer.Start() will use it to set up the secure channel and
-    // the PKI directory structure (trusted/, rejected/, issuers/).
+    // the PKI directory structure (trusted/, rejected/, issuer/).
 
     config.SetCertificateStore(store);
 
