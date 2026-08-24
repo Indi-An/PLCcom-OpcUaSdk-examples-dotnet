@@ -31,8 +31,20 @@ All examples in this repository are released under the **MIT License**. You are 
 **PLCcom Library License:**
 The **PLCcom OPC UA SDK** itself is proprietary software and is **NOT** included under the MIT license. To use the library in your own projects you must acquire an appropriate license and accept the EULA. More information: [https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-overview/)
 
+**Evaluation mode:**
+The examples pass two empty strings as username and serial. With blank fields the library runs for
+15 minutes with full functionality during a debug session – enough to establish a connection and
+read values, so you can try the examples out before registering.
+
+When the evaluation period ends, operation stops: an open connection is disconnected and a running
+server halts. The same applies when a time-limited license expires. The library never terminates
+your application.
+
 **Trial License:**
-A free trial license is available at the [PLCcom download page](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/).
+For uninterrupted work, generate a free trial license (14 days) at the
+[PLCcom download page](https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/). License data
+does not belong in source code – use configuration files, environment variables or a secret
+manager to load it at runtime.
 
 ---
 

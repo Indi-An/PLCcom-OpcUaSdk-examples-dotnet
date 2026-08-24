@@ -1,4 +1,4 @@
-// MIT License
+﻿// MIT License
 // Copyright (c) Indi.An GmbH
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -71,9 +71,13 @@ using System.Linq;
 using System.Threading;
 
 // -- License -------------------------------------------------------------------
-// TODO: Replace with your license credentials from your license e-mail
-string LicenseUserName = "<Enter your UserName here>";
-string LicenseSerial   = "<Enter your Serial here>";
+// Important !!!!!!!!!!!!!!!!!!
+// Enter your Username + Serial here! Please note: with blank fields the library runs
+// for 15 minutes during a debug session. Both values can also come
+// from configuration or an environment variable.
+// Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
+string LicenseUserName = "";
+string LicenseSerial   = "";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 34: Custom History Store║");

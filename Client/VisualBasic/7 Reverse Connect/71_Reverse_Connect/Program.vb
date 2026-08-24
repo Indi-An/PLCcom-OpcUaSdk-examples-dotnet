@@ -96,8 +96,13 @@ Public Class Program
             Console.WriteLine()
 
             ' TODO: Submit your license information from your license e-mail
-            Dim LicenseUserName As String = "<Enter your UserName here>"
-            Dim LicenseSerial As String = "<Enter your Serial here>"
+            ' Important !!!!!!!!!!!!!!!!!!
+            ' Enter your Username + Serial here! Please note: with blank fields the library runs
+            ' for 15 minutes during a debug session. Both values can also come
+            ' from configuration or an environment variable.
+            ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
+            Dim LicenseUserName As String = ""
+            Dim LicenseSerial As String = ""
 
             ' The URL where this client will listen for incoming ReverseHello messages.
             ' The server must be configured to connect to exactly this URL.

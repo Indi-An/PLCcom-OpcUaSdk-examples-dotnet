@@ -1,4 +1,4 @@
-' MIT License
+﻿' MIT License
 ' Copyright (c) Indi.An GmbH
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -77,8 +77,13 @@ Public Class Program
         Try
             'TODO
             'Submit your license information from your license e-mail
-            Dim LicenseUserName As String = "<Enter your UserName here>"
-            Dim LicenseSerial As String = "<Enter your Serial here>"
+            ' Important !!!!!!!!!!!!!!!!!!
+            ' Enter your Username + Serial here! Please note: with blank fields the library runs
+            ' for 15 minutes during a debug session. Both values can also come
+            ' from configuration or an environment variable.
+            ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
+            Dim LicenseUserName As String = ""
+            Dim LicenseSerial As String = ""
 
             Dim endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(
                 New Uri("opc.tcp://localhost:48410"),
