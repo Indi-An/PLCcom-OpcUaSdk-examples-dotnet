@@ -92,6 +92,9 @@ class Program
             // Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             string LicenseUserName = "";
             string LicenseSerial   = "";
+            // Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            if (LicenseUserName.Length == 0) LicenseUserName = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER") ?? "";
+            if (LicenseSerial.Length == 0) LicenseSerial = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL") ?? "";
 
             // -- Step 1: Configure the subscriber ----------------------------------
             // Note the mqtts:// scheme and port 8883 instead of mqtt:// and 1883.
@@ -101,6 +104,7 @@ class Program
                 .WithNetworkInterface(NetworkInterfaces.All)
                 .WithTransport(PubSubTransportMode.BrokerMqttUadp, "mqtts://localhost:8883")
                 .WithMqttTls("./pki")
+                .WithMqttTopicPrefix("opcua-tls")
                 .AddDataSetReader("opcua:Workshop23", "MotorData", ds => ds
                     .AddField("Speed",       BuiltInType.Double)
                     .AddField("Current",     BuiltInType.Double)

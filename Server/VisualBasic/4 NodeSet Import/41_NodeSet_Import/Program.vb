@@ -63,6 +63,9 @@ Module Program
         ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
         Dim LicenseUserName As String = ""
         Dim LicenseSerial As String = ""
+        ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+        If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+        If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
 
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
         Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 41: NodeSet Import      ║")
@@ -104,6 +107,25 @@ Module Program
             ' ImportNodeSet() reads the XML file and adds all nodes to the address space.
             ' Namespaces defined in the NodeSet are automatically registered.
             ' The method returns the number of nodes imported.
+            '
+            ' Namespace rules for NodeSet XML files (the standard NodeSet2 rule):
+            '   1. A namespace index in the XML refers to the <NamespaceUris> table of the
+            '      file itself: ns=1 is its first entry, ns=2 its second entry, and so on.
+            '      ns=0 is always the OPC UA standard namespace. File index and server
+            '      index are independent of each other.
+            '   2. Every namespace used in the file (except ns=0) MUST be declared in
+            '      <NamespaceUris>. An index beyond the table is refused: the import throws
+            '      and adds nothing.
+            '   3. ImportNodeSet() maps each URI of the file to the server's index of the
+            '      same URI and adds a URI the server does not know yet. A URI equal to
+            '      cfg.NamespaceUri is the server application namespace; use
+            '      server.GetNamespaceIndex(uri) to get the server index of a URI.
+            '   4. A node id that exists already is refused (BadNodeIdExists). A file is
+            '      imported as a whole or not at all.
+            '
+            ' PLCcom_Workshop_NodeSet.xml declares two namespaces: file ns=1 is the server
+            ' application namespace (SensorType, Sensors), file ns=2 is
+            ' urn:plccom:workshop:nodeset (MotorType, Motors).
             '
             ' The NodeSet2 XML format is defined by the OPC Foundation in:
             '   OPC UA Specification Part 6 - Mappings, Annex F (UANodeSet XML Schema)

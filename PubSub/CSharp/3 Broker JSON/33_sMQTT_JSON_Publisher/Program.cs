@@ -93,6 +93,9 @@ class Program
             // Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             string LicenseUserName = "";
             string LicenseSerial   = "";
+            // Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            if (LicenseUserName.Length == 0) LicenseUserName = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER") ?? "";
+            if (LicenseSerial.Length == 0) LicenseSerial = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL") ?? "";
 
             // -- Step 1: Configure the publisher -----------------------------------
             // BrokerMqttJson = JSON encoding over MQTT.
@@ -102,6 +105,7 @@ class Program
                 .WithNetworkInterface(NetworkInterfaces.All)
                 .WithTransport(PubSubTransportMode.BrokerMqttJson, "mqtts://localhost:8883")
                 .WithMqttTls("./pki")
+                .WithMqttTopicPrefix("opcua-tls")
                 .WithPublishingInterval(2000)
                 .AddDataSet("EnergyMeter", ds => ds
                     .AddField("Voltage", new NodeId(4001, 2))
@@ -140,7 +144,7 @@ class Program
             int counter = 0;
             double totalEnergy = 1000.0;
 
-            while (!Console.KeyAvailable)
+            while (!(!Console.IsInputRedirected && Console.KeyAvailable))
             {
                 double voltage = 230.0 + (random.NextDouble() - 0.5) * 10.0;
                 double current = 5.0   + random.NextDouble() * 3.0;

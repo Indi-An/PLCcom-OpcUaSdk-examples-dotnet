@@ -82,6 +82,9 @@ Module Program
             ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             Dim LicenseUserName As String = ""
             Dim LicenseSerial As String = ""
+            ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+            If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
 
             ' -- Step 1: Configure the publisher -----------------------------------
             ' BrokerMqttJson = JSON encoding over MQTT.
@@ -91,6 +94,7 @@ Module Program
                 .WithNetworkInterface(NetworkInterfaces.All) _
                 .WithTransport(PubSubTransportMode.BrokerMqttJson, "mqtts://localhost:8883") _
                 .WithMqttTls("./pki") _
+                .WithMqttTopicPrefix("opcua-tls") _
                 .WithPublishingInterval(2000) _
                 .AddDataSet("EnergyMeter", Sub(ds)
                                                ds.AddField("Voltage", New NodeId(4001UI, 2US))
@@ -129,7 +133,7 @@ Module Program
                 Dim counter As Integer = 0
                 Dim totalEnergy As Double = 1000.0
 
-                While Not Console.KeyAvailable
+                While Not (Not Console.IsInputRedirected AndAlso Console.KeyAvailable)
                     Dim voltage As Double = 230.0 + (random.NextDouble() - 0.5) * 10.0
                     Dim current As Double = 5.0 + random.NextDouble() * 3.0
                     Dim power As Double = voltage * current

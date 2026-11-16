@@ -79,6 +79,9 @@ Module Program
             ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             Dim LicenseUserName As String = ""
             Dim LicenseSerial As String = ""
+            ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+            If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
 
             ' -- Step 1: Configure the publisher -----------------------------------
             Dim config = UaPublisherConfiguration.Build("MotorPublisher", "opcua:Workshop21") _
@@ -110,7 +113,7 @@ Module Program
                 Dim random As New Random()
                 Dim counter As Integer = 0
 
-                While Not Console.KeyAvailable
+                While Not (Not Console.IsInputRedirected AndAlso Console.KeyAvailable)
                     Dim speed As Double = 1450.0 + random.NextDouble() * 50.0
                     Dim current As Double = 12.5 + random.NextDouble() * 2.0
                     Dim temperature As Double = 55.0 + random.NextDouble() * 10.0

@@ -84,6 +84,9 @@ Public Class Program
             ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             Dim LicenseUserName As String = ""
             Dim LicenseSerial As String = ""
+            ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+            If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
             Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
@@ -121,6 +124,9 @@ Public Class Program
                         AddHandler client.SessionClosing, AddressOf Client_SessionClosing
                         AddHandler client.KeepAlive, AddressOf Client_KeepAlive
                         AddHandler client.CertificateValidation, AddressOf client_CertificateValidation
+
+                        ' AutoConnect is off, so nothing connects on its own: connect explicitly.
+                        client.Connect()
 
                         ' 
                         ' let´s starting a method call, step by step

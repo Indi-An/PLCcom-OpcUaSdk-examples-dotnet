@@ -82,6 +82,9 @@ using System.Collections.Generic;
 // Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
 string LicenseUserName = "";
 string LicenseSerial = "";
+// Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+if (LicenseUserName.Length == 0) LicenseUserName = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER") ?? "";
+if (LicenseSerial.Length == 0) LicenseSerial = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL") ?? "";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 15: Custom Types        ║");
@@ -252,12 +255,12 @@ var machineDataTypeId = server.CreateStructDataType("MachineDataType",
     ("MotorSpeed", DataTypeIds.Double, null));
 
 // Create struct variables and set initial values
-var motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId);
 motorStruct.SetField<double>("Speed",       1500.0);
 motorStruct.SetField<double>("Temperature", 45.0);
 motorStruct.SetField<bool>  ("Running",     true);
 
-var machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId);
 machineStruct.SetField<string>("State",      "Running");
 machineStruct.SetField<long>  ("CycleCount", 0L);
 machineStruct.SetField<double>("MotorSpeed", 1500.0);
@@ -283,7 +286,7 @@ var plantDataTypeId = server.CreateStructDataType("PlantDataType",
     ("Motor",           motorDataTypeId,    null),
     ("Machine",         machineDataTypeId,  null));
 
-var plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId);
 plantStruct.SetField<string>("PlantName",       "Factory_01");
 plantStruct.SetField<int>   ("ProductionCount", 42);
 
@@ -315,7 +318,7 @@ var sensorDataTypeId = server.CreateStructDataType("SensorDataType",
     ("Readings",   DataTypeIds.Double, new uint[] { 4 }),
     ("Thresholds", DataTypeIds.Double, new uint[] { 2 }));
 
-var sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId);
 sensorStruct.SetField<string>  ("Name",       "TempSensor_01");
 sensorStruct.SetField<double[]>("Readings",   new double[] { 23.5, 24.1, 22.8, 25.0 });
 sensorStruct.SetField<double[]>("Thresholds", new double[] { 50.0, 75.0 });
@@ -367,7 +370,7 @@ var factoryDataTypeId = server.CreateStructDataType("FactoryDataType",
     ("FactoryName", DataTypeIds.String,  null),
     ("Motors",      motorDataTypeId,     new uint[] { 2 }));
 
-var factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId);
 factoryStruct.SetField<string>("FactoryName", "MainFactory");
 
 // Array-of-structs fields use "Field.[N].SubField" path syntax
@@ -392,14 +395,14 @@ Console.WriteLine();
 // Encoded per Spec Part 6 Table 27: Inline Matrix encoding
 // (Int32 total elements, flat values, Int32 num dimensions, Int32[] dimensions)
 //
-// In UaExpert the Matrix appears as child nodes: Matrix[0][0], Matrix[0][1], ...
+// In an OPC UA client the Matrix typically appears as child nodes: Matrix[0][0], Matrix[0][1], ...
 Console.WriteLine("-- Part G: Struct with 2D Matrix field --------------------------");
 
 var gridDataTypeId = server.CreateStructDataType("GridDataType",
     ("Label",  DataTypeIds.String, null),
     ("Matrix", DataTypeIds.Double, new uint[] { 2, 3 }));
 
-var gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS);
+var gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId);
 gridStruct.SetField<string>("Label", "HeatMap_01");
 gridStruct.SetField("Matrix", new Matrix(
     new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 },

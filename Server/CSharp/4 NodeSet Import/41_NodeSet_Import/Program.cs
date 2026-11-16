@@ -63,6 +63,9 @@ using System.IO;
 // Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
 string LicenseUserName = "";
 string LicenseSerial = "";
+// Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+if (LicenseUserName.Length == 0) LicenseUserName = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER") ?? "";
+if (LicenseSerial.Length == 0) LicenseSerial = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL") ?? "";
 
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 41: NodeSet Import      ║");
@@ -105,43 +108,46 @@ Console.WriteLine();
 //
 // ── Namespace rules for NodeSet XML files ─────────────────────────────────────
 //
-//   Server namespace layout:
+//   Server namespace layout (the indices on the server):
 //     ns=0  OPC UA Standard (http://opcfoundation.org/UA/)
-//     ns=1  SDK internal – not available for user nodes
+//     ns=1  SDK internal - not available for user nodes
 //     ns=2  Server Application Namespace (from config.NamespaceUri)
 //     ns=3+ Additional namespaces (registered via <NamespaceUris> in the XML)
 //
-//   Rules for authoring NodeSet XML files:
-//     1. Namespace indices in the XML are ABSOLUTE server indices.
-//        ns=2 in the file means ns=2 on the server. ns=3 means ns=3.
+//   Rules for authoring NodeSet XML files (the standard NodeSet2 rule):
+//     1. A namespace index in the XML refers to the <NamespaceUris> table of the
+//        file itself: ns=1 is its first entry, ns=2 its second entry, and so on.
+//        ns=0 is always the OPC UA standard namespace. File index and server
+//        index are independent of each other.
 //     2. Every namespace used in the file (except ns=0) MUST be declared
-//        in <NamespaceUris>. The server application namespace (ns=2) must
-//        also be listed if nodes use it.
-//     3. If a namespace referenced by a node is NOT declared in
-//        <NamespaceUris>, the node falls back to ns=2.
-//     4. AccessLevel="3" (CurrentRead | CurrentWrite) must be set explicitly
+//        in <NamespaceUris>. An index beyond the table is refused: the import
+//        throws and adds nothing.
+//     3. ImportNodeSet() maps each URI of the file to the server's index of the
+//        same URI and adds a URI the server does not know yet. A URI equal to
+//        config.NamespaceUri is the server application namespace; use
+//        server.GetNamespaceIndex(uri) to get the server index of a URI.
+//     4. A node id that exists already is refused (BadNodeIdExists). A file is
+//        imported as a whole or not at all.
+//     5. AccessLevel="3" (CurrentRead | CurrentWrite) must be set explicitly
 //        on writable UAVariable nodes. Without it, the OPC UA spec default
 //        is ReadOnly (Part 6, Table F.8).
-//     5. Properties (HasProperty) like SerialNumber or Unit are typically
-//        left without AccessLevel → ReadOnly by design.
-//
-//   The SDK's ImportNodeSet() handles the namespace mapping internally
-//   by padding the NamespaceUris array so the OPC UA stack's file-relative
-//   remapping produces the correct absolute server indices.
+//     6. Properties (HasProperty) like SerialNumber or Unit are typically
+//        left without AccessLevel -> ReadOnly by design.
 //
 // ── Sample NodeSet ─────────────────────────────────────────────────────────────
 //
 // PLCcom_Workshop_NodeSet.xml is included with this workshop.
-// It defines two namespaces:
-//   ns=2  Server App Namespace → SensorType, TempSensor1, PressureSensor1
-//   ns=3  urn:plccom:workshop:nodeset → MotorType, Motor1, Motor2
+// It declares two namespaces (file index -> server index in this workshop):
+//   ns=1  http://indi-an.com/opcua/workshop/nodeset-import -> server ns=2
+//         (the server application namespace): SensorType, TempSensor1, PressureSensor1
+//   ns=2  urn:plccom:workshop:nodeset -> server ns=3: MotorType, Motor1, Motor2
 //
 // Types:
-//   SensorType (ns=2) - Value (Double), Unit (String), InAlarm (Boolean)
-//   MotorType  (ns=3) - Speed (Double), Running (Boolean), SerialNumber (String)
+//   SensorType (file ns=1) - Value (Double), Unit (String), InAlarm (Boolean)
+//   MotorType  (file ns=2) - Speed (Double), Running (Boolean), SerialNumber (String)
 // Instances:
-//   Sensors/ (ns=2) - TempSensor1, PressureSensor1
-//   Motors/  (ns=3) - Motor1, Motor2
+//   Sensors/ (file ns=1) - TempSensor1, PressureSensor1
+//   Motors/  (file ns=2) - Motor1, Motor2
 string nodeSetPath = "PLCcom_Workshop_NodeSet.xml";
 
 if (File.Exists(nodeSetPath))
@@ -151,10 +157,10 @@ if (File.Exists(nodeSetPath))
     Console.WriteLine($"  Imported {count} nodes successfully");
     Console.WriteLine();
     Console.WriteLine("  Nodes imported:");
-    Console.WriteLine("    Types    -> Types/ObjectTypes/SensorType  (ns=2)");
-    Console.WriteLine("    Types    -> Types/ObjectTypes/MotorType   (ns=3)");
-    Console.WriteLine("    Instance -> Objects/Sensors/TempSensor1, PressureSensor1  (ns=2)");
-    Console.WriteLine("    Instance -> Objects/Motors/Motor1, Motor2                (ns=3)");
+    Console.WriteLine("    Types    -> Types/ObjectTypes/SensorType  (server ns=2)");
+    Console.WriteLine("    Types    -> Types/ObjectTypes/MotorType   (server ns=3)");
+    Console.WriteLine("    Instance -> Objects/Sensors/TempSensor1, PressureSensor1  (server ns=2)");
+    Console.WriteLine("    Instance -> Objects/Motors/Motor1, Motor2                (server ns=3)");
 }
 else
 {

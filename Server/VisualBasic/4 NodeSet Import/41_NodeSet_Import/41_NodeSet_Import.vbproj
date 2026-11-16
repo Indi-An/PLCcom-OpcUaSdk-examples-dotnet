@@ -6,6 +6,11 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="10.10.*" />
+    <PackageReference Include="PLCcom.Opc.Ua.Sdk" Version="11.1.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="PLCcom_Workshop_NodeSet.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

@@ -52,6 +52,9 @@ Module Program
         ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
         Dim LicenseUserName As String = ""
         Dim LicenseSerial As String = ""
+        ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+        If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+        If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
 
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗")
         Console.WriteLine("║  PLCcom OPC UA Server SDK - Workshop 15: Custom Types        ║")
@@ -177,12 +180,12 @@ Module Program
                 ("CycleCount", DataTypeIds.Int64, Nothing),
                 ("MotorSpeed", DataTypeIds.Double, Nothing))
 
-            Dim motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim motorStruct = server.CreateStructVariable(structFolder, "Motor_Struct", motorDataTypeId)
             motorStruct.SetField(Of Double)("Speed", 1500.0)
             motorStruct.SetField(Of Double)("Temperature", 45.0)
             motorStruct.SetField(Of Boolean)("Running", True)
 
-            Dim machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim machineStruct = server.CreateStructVariable(structFolder, "Machine_Struct", machineDataTypeId)
             machineStruct.SetField(Of String)("State", "Running")
             machineStruct.SetField(Of Long)("CycleCount", 0L)
             machineStruct.SetField(Of Double)("MotorSpeed", 1500.0)
@@ -204,7 +207,7 @@ Module Program
                 ("Motor", motorDataTypeId, Nothing),
                 ("Machine", machineDataTypeId, Nothing))
 
-            Dim plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim plantStruct = server.CreateStructVariable(structFolder, "Plant_Struct", plantDataTypeId)
             plantStruct.SetField(Of String)("PlantName", "Factory_01")
             plantStruct.SetField(Of Integer)("ProductionCount", 42)
             plantStruct.SetField(Of Double)("Motor.Speed", 2200.0)
@@ -228,7 +231,7 @@ Module Program
                 ("Readings", DataTypeIds.Double, New UInteger() {4}),
                 ("Thresholds", DataTypeIds.Double, New UInteger() {2}))
 
-            Dim sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim sensorStruct = server.CreateStructVariable(structFolder, "Sensor_Struct", sensorDataTypeId)
             sensorStruct.SetField(Of String)("Name", "TempSensor_01")
             sensorStruct.SetField(Of Double())("Readings", New Double() {23.5, 24.1, 22.8, 25.0})
             sensorStruct.SetField(Of Double())("Thresholds", New Double() {50.0, 75.0})
@@ -268,7 +271,7 @@ Module Program
                 ("FactoryName", DataTypeIds.String, Nothing),
                 ("Motors", motorDataTypeId, New UInteger() {2}))
 
-            Dim factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim factoryStruct = server.CreateStructVariable(structFolder, "Factory_Struct", factoryDataTypeId)
             factoryStruct.SetField(Of String)("FactoryName", "MainFactory")
             factoryStruct.SetField(Of Double)("Motors.[0].Speed", 1000.0)
             factoryStruct.SetField(Of Double)("Motors.[0].Temperature", 40.0)
@@ -290,7 +293,7 @@ Module Program
                 ("Label", DataTypeIds.String, Nothing),
                 ("Matrix", DataTypeIds.Double, New UInteger() {2, 3}))
 
-            Dim gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId, UaRolePermissions.WITHOUT_RESTRICTIONS)
+            Dim gridStruct = server.CreateStructVariable(structFolder, "Grid_Struct", gridDataTypeId)
             gridStruct.SetField(Of String)("Label", "HeatMap_01")
             gridStruct.SetField("Matrix", New Matrix(
                 New Double() {1.0, 2.0, 3.0, 4.0, 5.0, 6.0},

@@ -84,6 +84,9 @@ Public Class Program
             ' Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             Dim LicenseUserName As String = ""
             Dim LicenseSerial As String = ""
+            ' Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            If LicenseUserName.Length = 0 Then LicenseUserName = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER"), "")
+            If LicenseSerial.Length = 0 Then LicenseSerial = If(System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL"), "")
             Dim Endpoints As EndpointDescriptionCollection = UaClient.GetEndpoints(New Uri("opc.tcp://localhost:48410"), certificateValidator:=AddressOf client_CertificateValidation)
 
             'sort endpoints by security level
@@ -132,24 +135,24 @@ Public Class Program
                     ' NodeIds are fixed for Server Workshop 11 - assigned in creation order
                     ' ns=2 is the first custom namespace; i= is the sequential node counter
                     ' Plant=1, Line1=2, Machine1=3, Temperature=4, Pressure=5, RPM=6
-                    Dim temperatureId As NodeId = New NodeId("ns=2;i=4") ' Double
-                    Dim rpmId As NodeId = New NodeId("ns=2;i=6")         ' Int32
-                    Dim pressureId As NodeId = New NodeId("ns=2;i=5")    ' Float
+                    Dim temperatureId As NodeId = New NodeId("ns=2;i=12") ' Double
+                    Dim rpmId As NodeId = New NodeId("ns=2;i=14")         ' Int32
+                    Dim pressureId As NodeId = New NodeId("ns=2;i=13")    ' Float
 
                     'first create a ReadValueIdCollection and fill this with ReadValueId objects
                     Dim nodesToRead As ReadValueIdCollection = New ReadValueIdCollection()
                     Dim nodeToRead As ReadValueId = New ReadValueId()
-                    nodeToRead.NodeId = temperatureId ' ns=2;i=4
+                    nodeToRead.NodeId = temperatureId ' ns=2;i=12
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = rpmId ' ns=2;i=6
+                    nodeToRead.NodeId = rpmId ' ns=2;i=14
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
                     nodeToRead = New ReadValueId()
-                    nodeToRead.NodeId = pressureId ' ns=2;i=5
+                    nodeToRead.NodeId = pressureId ' ns=2;i=13
                     nodeToRead.AttributeId = Attributes.Value
                     nodesToRead.Add(nodeToRead)
 
@@ -180,17 +183,17 @@ Public Class Program
                     'create a WriteValueCollection and fill this with WriteValue objects
                     Dim nodesToWrite As WriteValueCollection = New WriteValueCollection()
                     Dim writeValue As WriteValue = New WriteValue()
-                    writeValue.NodeId = temperatureId ' ns=2;i=4
+                    writeValue.NodeId = temperatureId ' ns=2;i=12
                     writeValue.Value = New DataValue(25.5)
                     writeValue.AttributeId = Attributes.Value
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = rpmId ' ns=2;i=6
+                    writeValue.NodeId = rpmId ' ns=2;i=14
                     writeValue.AttributeId = Attributes.Value
                     writeValue.Value = New DataValue(1750)
                     nodesToWrite.Add(writeValue)
                     writeValue = New WriteValue()
-                    writeValue.NodeId = pressureId ' ns=2;i=5
+                    writeValue.NodeId = pressureId ' ns=2;i=13
                     writeValue.AttributeId = Attributes.Value
                     writeValue.Value = New DataValue(1.05F)
                     nodesToWrite.Add(writeValue)

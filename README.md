@@ -141,6 +141,8 @@ For a full list of supported features and detailed descriptions, refer to the of
 | 61 | Simple Events | Fire events from the server |
 | **7 Reverse Connect** | | |
 | 71 | Reverse Connect | Server-initiated connections through firewalls |
+| **8 Local Discovery Server** | | |
+| 81 | Local Discovery Server | A discovery server: servers register with it, clients find them with FindServers |
 
 ### PubSub Workshops (C# and Visual Basic)
 
@@ -168,6 +170,14 @@ Install-Package PLCcom.Opc.Ua.PubSub
 | 32 | MQTT JSON Subscriber | Receive JSON messages from an MQTT broker |
 | 33 | sMQTT JSON Publisher | Publish JSON via MQTT broker with TLS encryption |
 | 34 | sMQTT JSON Subscriber | Receive JSON messages over a TLS-secured MQTT connection |
+| **4 Message Security** | | |
+| 41 | Secure Unicast Publisher | Sign and encrypt every UADP message; the key comes from a file, never from the code |
+| 42 | Secure Unicast Subscriber | Verify and decrypt the secured messages with the same key |
+| 43 | Key Server | A Security Key Service (SKS): hands out keys that change by themselves to publishers and subscribers; encrypted channel only, no anonymous access |
+| 44 | Secure Publisher (keys from the Key Server) | Fetch the keys from the key server and follow every key change |
+| 45 | Secure Subscriber (keys from the Key Server) | Fetch the keys from the key server and follow every key change |
+
+Workshops 43 to 45 use the Security Key Service of the PLCcom.Opc.Ua.PubSub add-on (available since version 11.1).
 
 ### Client ↔ Server Pairing
 
@@ -195,6 +205,7 @@ Many client workshops are designed to work with a specific server workshop. Star
 | 51 Complex Types | 15 Custom Types | Structured data types |
 | 61 Simple Events | 61 Simple Events | Events |
 | 71 Reverse Connect | 71 Reverse Connect | Firewall traversal |
+| 11 Discover Server | 81 Local Discovery Server | Find registered servers (use the address of the Local Discovery Server) |
 
 ### Publisher ↔ Subscriber Pairing
 
@@ -209,15 +220,17 @@ Each publisher workshop has a matching subscriber. Run the publisher first, then
 | 23 sMQTT UADP Publisher | 24 sMQTT UADP Subscriber | MQTT broker, UADP encoding, TLS |
 | 31 MQTT JSON Publisher | 32 MQTT JSON Subscriber | MQTT broker, JSON encoding |
 | 33 sMQTT JSON Publisher | 34 sMQTT JSON Subscriber | MQTT broker, JSON encoding, TLS |
+| 41 Secure Unicast Publisher | 42 Secure Unicast Subscriber | UDP unicast, UADP message security, fixed key from a file |
+| 44 Secure Publisher (Key Pull) | 45 Secure Subscriber (Key Pull) | UDP unicast, UADP message security, keys from the 43 Key Server (start 43 first) |
 
 ---
 
 ## Requirements
 
-- .NET 10.0
+- .NET 10.0 (the examples target .NET 10.0; the SDK itself also supports .NET 11)
 - Visual Studio 2022 or newer (recommended VS2026)
-- [PLCcom.Opc.Ua.Sdk](https://www.nuget.org/packages/PLCcom.Opc.Ua.Sdk) 10.10.* or newer
-- [PLCcom.Opc.Ua.PubSub](https://www.nuget.org/packages/PLCcom.Opc.Ua.PubSub) 10.10.* or newer (PubSub workshops only)
+- [PLCcom.Opc.Ua.Sdk](https://www.nuget.org/packages/PLCcom.Opc.Ua.Sdk) 11.1.* or newer
+- [PLCcom.Opc.Ua.PubSub](https://www.nuget.org/packages/PLCcom.Opc.Ua.PubSub) 11.1.* or newer (PubSub workshops only)
 
 ---
 

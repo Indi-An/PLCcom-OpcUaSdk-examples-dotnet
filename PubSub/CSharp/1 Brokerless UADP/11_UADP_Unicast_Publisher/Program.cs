@@ -85,6 +85,9 @@ class Program
             // Free trial license (14 days, uninterrupted): https://www.indi-an.com/en/plccom/opc-ua-sdk/opcua-download/
             string LicenseUserName = "";
             string LicenseSerial   = "";
+            // Enter your license here, or set the environment variables PLCCOM_OPCUA_LICENSE_USER and PLCCOM_OPCUA_LICENSE_SERIAL.
+            if (LicenseUserName.Length == 0) LicenseUserName = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_USER") ?? "";
+            if (LicenseSerial.Length == 0) LicenseSerial = System.Environment.GetEnvironmentVariable("PLCCOM_OPCUA_LICENSE_SERIAL") ?? "";
 
             // -- Step 1: Configure the publisher -----------------------------------
             // UaPublisherConfiguration uses a fluent builder pattern.
@@ -139,7 +142,7 @@ class Program
             double temp2 = 30.0 + random.NextDouble() * 5.0;
             double temp3 = 40.0 + random.NextDouble() * 5.0;
 
-            while (!Console.KeyAvailable)
+            while (!(!Console.IsInputRedirected && Console.KeyAvailable))
             {
                 counter++;
 
